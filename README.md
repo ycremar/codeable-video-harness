@@ -49,6 +49,13 @@ input. A standalone live GPT/Opus run still needs an authenticated author comman
 that model path was unavailable in this cloud environment. Human craft, speech
 quality and reference-parity judgments remain separate from machine checks.
 
+The completed benchmark is **192 seconds at 720p/30 fps**, with Mandarin speech
+and captions. All 17 machine requirements pass; three human criteria remain
+pending. All 52 local tests pass, including browser integration. The first full
+render caught an order-dependent canvas bug; its failed report and the passing
+rerender evidence are retained. This is progress toward the reference's ambition,
+not a claim of equal creative quality.
+
 ## Run the lightweight backend
 
 Python 3.11+, FFmpeg/ffprobe with libx264. Runtime is offline and model-free.

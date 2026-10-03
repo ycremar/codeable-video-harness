@@ -1,0 +1,222 @@
+{
+  "binding": "046413094d342ddf08ea2e75a83bb9a56c600d9f8fc74106200dd98610c71fd1",
+  "coverage": {
+    "total": 20,
+    "measured": 17,
+    "ratio": 0.85
+  },
+  "machine_ok": true,
+  "accepted": false,
+  "state": "needs_review",
+  "requirements": [
+    {
+      "id": "DURATION",
+      "description": "DURATION",
+      "kind": "hard",
+      "status": "pass",
+      "metric": "duration_s",
+      "target": 192,
+      "op": "eq",
+      "value": 192.0,
+      "evidence": "ffprobe: encoded video stream"
+    },
+    {
+      "id": "WIDTH",
+      "description": "WIDTH",
+      "kind": "hard",
+      "status": "pass",
+      "metric": "width_px",
+      "target": 1280,
+      "op": "eq",
+      "value": 1280,
+      "evidence": "ffprobe: encoded video stream"
+    },
+    {
+      "id": "HEIGHT",
+      "description": "HEIGHT",
+      "kind": "hard",
+      "status": "pass",
+      "metric": "height_px",
+      "target": 720,
+      "op": "eq",
+      "value": 720,
+      "evidence": "ffprobe: encoded video stream"
+    },
+    {
+      "id": "FPS",
+      "description": "FPS",
+      "kind": "hard",
+      "status": "pass",
+      "metric": "fps",
+      "target": 30,
+      "op": "eq",
+      "value": 30.0,
+      "evidence": "ffprobe: encoded video stream"
+    },
+    {
+      "id": "AUDIO",
+      "description": "AUDIO",
+      "kind": "hard",
+      "status": "pass",
+      "metric": "audio_present",
+      "target": true,
+      "op": "eq",
+      "value": true,
+      "evidence": "ffprobe: stream inventory"
+    },
+    {
+      "id": "SEEK",
+      "description": "SEEK",
+      "kind": "hard",
+      "status": "pass",
+      "metric": "determinism_mismatches",
+      "target": 0,
+      "op": "eq",
+      "value": 0,
+      "evidence": "raw sampled frames, reverse/shuffled seeks; finite evidence only"
+    },
+    {
+      "id": "PEAK",
+      "description": "Decoded sample peak at most -1 dBFS",
+      "kind": "hard",
+      "status": "pass",
+      "metric": "audio_peak_dbfs",
+      "target": -1,
+      "op": "le",
+      "value": -2.9162345199109216,
+      "evidence": "decoded PCM sample peak, not true-peak or loudness"
+    },
+    {
+      "id": "SAFE",
+      "description": "Text has at least 36px horizontal and 18px vertical safe margins",
+      "kind": "proxy",
+      "status": "pass",
+      "metric": "safe_area_violations",
+      "target": 0,
+      "op": "eq",
+      "value": 0,
+      "evidence": "all-frame rasterizer text bounds; assumes telemetry is honest"
+    },
+    {
+      "id": "TEXTSIZE",
+      "description": "All text at least 20px",
+      "kind": "proxy",
+      "status": "pass",
+      "metric": "minimum_text_size_px",
+      "target": 20,
+      "op": "ge",
+      "value": 22,
+      "evidence": "instrumented font size in output pixels; not perceived legibility"
+    },
+    {
+      "id": "CONTRAST",
+      "description": "Declared text/backing contrast at least 4.5",
+      "kind": "proxy",
+      "status": "pass",
+      "metric": "minimum_contrast",
+      "target": 4.5,
+      "op": "ge",
+      "value": 6.262507432896744,
+      "evidence": "declared text/background contrast; overlapping artwork not modeled"
+    },
+    {
+      "id": "ENCODE",
+      "description": "Decoded frame MAE below 8",
+      "kind": "proxy",
+      "status": "pass",
+      "metric": "decode_mae",
+      "target": 8,
+      "op": "le",
+      "value": 1.698048683449074,
+      "evidence": "sampled encoded pixels vs renderer pixels; 0..255 MAE"
+    },
+    {
+      "id": "SCENES",
+      "description": "At least 16 planned scene windows; not semantic variety",
+      "kind": "proxy",
+      "status": "pass",
+      "metric": "planned_scene_count",
+      "target": 16,
+      "op": "ge",
+      "value": 16,
+      "evidence": "declared timeline windows, not detected cuts or narrative quality"
+    },
+    {
+      "id": "VARIETY",
+      "description": "At least 8 declared visual mechanisms; not quality",
+      "kind": "proxy",
+      "status": "pass",
+      "metric": "planned_visual_kinds",
+      "target": 8,
+      "op": "ge",
+      "value": 13,
+      "evidence": "declared mechanisms; repeated code paths may look similar, inspect actual output"
+    },
+    {
+      "id": "SPEECH",
+      "description": "At least 120 seconds of synthesized speech placements",
+      "kind": "proxy",
+      "status": "pass",
+      "metric": "narration_seconds",
+      "target": 120,
+      "op": "ge",
+      "value": 160.59871199999998,
+      "evidence": "sum of separately synthesized phrase durations; not ASR or speech quality"
+    },
+    {
+      "id": "CAPTIONS",
+      "description": "Caption windows agree with synthesized phrase placements",
+      "kind": "proxy",
+      "status": "pass",
+      "metric": "caption_timing_error_ms",
+      "target": 1,
+      "op": "le",
+      "value": 0.0,
+      "evidence": "caption vs synthesized phrase placement; no forced alignment or pronunciation validation"
+    },
+    {
+      "id": "CONTENT",
+      "description": "Explanatory phrases represented in text telemetry",
+      "kind": "proxy",
+      "status": "pass",
+      "metric": "text_present",
+      "target": true,
+      "op": "eq",
+      "value": true,
+      "evidence": "all-frame instrumented text trace; not OCR, not proof against occlusion"
+    },
+    {
+      "id": "SYNC",
+      "description": "Scene starts fall on the declared beat grid",
+      "kind": "proxy",
+      "status": "pass",
+      "metric": "beat_cut_error_ms",
+      "target": 1,
+      "op": "le",
+      "value": 0.0,
+      "evidence": "declared scene cuts vs declared beat grid; not detected audio onsets"
+    },
+    {
+      "id": "CRAFT",
+      "description": "Similar production ambition: coherent argument, visual progression, purposeful motion, varied compositions; compare actual videos, not scores.",
+      "kind": "human",
+      "status": "unmeasured",
+      "reason": "No completed, artifact-bound review (or review is stale)"
+    },
+    {
+      "id": "VOICE",
+      "description": "Listen to full Mandarin narration: correct pronunciation, natural delivery, no awkward gaps, music below speech; verify captions at normal speed.",
+      "kind": "human",
+      "status": "unmeasured",
+      "reason": "No completed, artifact-bound review (or review is stale)"
+    },
+    {
+      "id": "COMPREHENSION",
+      "description": "After one normal-speed view, a new viewer can explain author/renderer/evaluator separation and measurement limits.",
+      "kind": "human",
+      "status": "unmeasured",
+      "reason": "No completed, artifact-bound review (or review is stale)"
+    }
+  ],
+  "warning": "Acceptance applies only to this contract. No universal aesthetic score. Human review is an attestation, not authenticated identity."
+}
