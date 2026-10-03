@@ -1,0 +1,35 @@
+{
+  "version":1,"title":"FRAME LAB","seed":42,
+  "video":{"width":640,"height":360,"fps":24,"duration":8},
+  "render":{"samples":2,"shutter":0.3},
+  "style":{"background":"#F3F5F7","ink":"#162535","accent":"#3266B8","muted":"#B9C8D5","font":"assets/fonts/Inter.ttf"},
+  "footer":"Code. Render. Inspect.",
+  "assets":[{"path":"assets/fonts/Inter.ttf","source":"https://github.com/google/fonts/tree/main/ofl/inter","license":"SIL OFL 1.1; assets/fonts/Inter-OFL.txt"}],
+  "audio":{"mode":"procedural","gain":0.18},
+  "timing":{"bpm":120,"beat_offset":0},
+  "qa":{"sample_every":1},
+  "scenes":[
+    {"id":"idea","start":0,"end":2,"module":"scenes/editorial.py","params":{"headline":["One idea.","Every frame."],"visual":"orbit"}},
+    {"id":"contract","start":2,"end":4,"module":"scenes/editorial.py","params":{"headline":["Define the test."],"visual":"bars"}},
+    {"id":"proof","start":4,"end":6,"module":"scenes/editorial.py","params":{"headline":["Inspect the output."],"visual":"flow"}},
+    {"id":"repeat","start":6,"end":8,"module":"scenes/editorial.py","params":{"headline":["Revise with evidence."],"visual":"orbit"}}
+  ],
+  "requirements":[
+    {"id":"DUR","description":"Exactly 8 seconds","kind":"hard","metric":"duration_s","op":"eq","target":8.0},
+    {"id":"W","description":"640 pixels wide","kind":"hard","metric":"width_px","op":"eq","target":640},
+    {"id":"H","description":"360 pixels high","kind":"hard","metric":"height_px","op":"eq","target":360},
+    {"id":"FPS","description":"24 fps","kind":"hard","metric":"fps","op":"eq","target":24},
+    {"id":"AUDIO","description":"Original percussive audio exists","kind":"hard","metric":"audio_present","op":"eq","target":true},
+    {"id":"PEAK","description":"Decoded audio sample peak below -10 dBFS","kind":"hard","metric":"audio_peak_dbfs","op":"le","target":-10},
+    {"id":"SEEK","description":"Sampled renders unaffected by seek order","kind":"hard","metric":"determinism_mismatches","op":"eq","target":0},
+    {"id":"CONTENT","description":"Key copy represented in render trace","kind":"proxy","metric":"text_present","params":{"strings":["Define the test.","Inspect the output."]},"op":"eq","target":true},
+    {"id":"FONT","description":"All text at least 18px","kind":"proxy","metric":"minimum_text_size_px","op":"ge","target":18},
+    {"id":"CONTRAST","description":"Declared text/backing contrast >=4.5","kind":"proxy","metric":"minimum_contrast","op":"ge","target":4.5},
+    {"id":"SAFE","description":"Text stays within 20px margins","kind":"proxy","metric":"safe_area_violations","params":{"margins":[20,20,20,20]},"op":"eq","target":0},
+    {"id":"HOLD","description":"Each main idea held for >=1.8s","kind":"proxy","metric":"minimum_text_hold_s","params":{"ids":["idea.headline.0","contract.headline.0","proof.headline.0","repeat.headline.0"]},"op":"ge","target":1.8},
+    {"id":"SYNC","description":"Declared cuts fall on beat grid","kind":"proxy","metric":"beat_cut_error_ms","op":"le","target":1},
+    {"id":"ENCODE","description":"Encoded samples stay close to source pixels","kind":"proxy","metric":"decode_mae","op":"le","target":8},
+    {"id":"NO-BLACK","description":"No almost-entirely black samples","kind":"proxy","metric":"black_fraction","op":"le","target":0.95},
+    {"id":"CRAFT","description":"Clear explanation and intentional motion","kind":"human","rubric":"Watch full clip with audio. Can a new viewer state the define→render→inspect→revise loop? Text readable without pausing? Motion purposeful and transitions comfortable? Cite timestamps; do not infer from numerical proxies."}
+  ]
+}

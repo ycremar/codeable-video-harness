@@ -31,6 +31,7 @@ points and the integration boundary. The current demos are Python renders.
 Python 3.11+, FFmpeg/ffprobe with libx264. Runtime is offline and model-free.
 
 ```sh
+python scripts/prepare_fonts.py
 python -m pip install -r requirements.txt
 python -m unittest discover -s tests -v
 python -m vch validate examples/explainer.json
@@ -39,6 +40,11 @@ python -m vch run examples/explainer.json --out runs/explainer-001 --trust-scene
 python -m vch run examples/atl.json --out runs/atl-001 --trust-scene-code
 python -m vch run examples/broken.json --out runs/broken-001 --trust-scene-code
 ```
+
+The full CJK font is stored losslessly as `NotoSerifSC.ttf.xz` to keep each upload
+below the connector's request limit. `prepare_fonts.py` restores the original
+25,125,512-byte font offline and verifies SHA-256; it does not subset or modify
+glyphs. Run it once after cloning. CI and the Docker recipe include this step.
 
 Exit **3 is intentional** when all machine tests pass but human review remains.
 Exit 2 = blocked/invalid. Exit 0 = accepted under the written contract. Never
