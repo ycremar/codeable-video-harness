@@ -7,7 +7,7 @@ for (const [name,path] of [['VCH',spec.style.font],['Latin','assets/fonts/Inter.
  const font=new FontFace(name,`url(/asset/${path})`);await font.load();document.fonts.add(font);
 }
 const output=document.querySelector('#output') as HTMLCanvasElement;output.width=W;output.height=H;
-const ctx=output.getContext('2d')!;
+const ctx=output.getContext('2d',{willReadFrequently:true})!;
 const glCanvas=document.createElement('canvas');
 // The soft procedural backdrop renders at half resolution; text/diagrams stay native.
 const renderer=new THREE.WebGLRenderer({canvas:glCanvas,antialias:false,preserveDrawingBuffer:true});renderer.setSize(W/2,H/2);
@@ -92,6 +92,8 @@ function renderVisual(kind:string,t:number,p:number,params:any){
  }else{labelRows(rows,t)}
 }
 function frame(t:number,encode=true){
+ // Reset both pixels and drawing state: a seek cannot inherit prior raster state.
+ ctx.reset();
  scene=spec.scenes.find((s:any)=>t>=s.start&&t<s.end);if(!scene)throw Error('Outside timeline');
  const params=scene.params||{},lt=t-scene.start,p=lt/(scene.end-scene.start),dark=params.theme!=='light';
  colors=dark?{bg:'#0B131F',ink:'#EEF2EA',accent:'#59D6C2',line:'#294455',panel:'#122D3A'}:{bg:'#EEF2EA',ink:'#112D3A',accent:'#09635E',line:'#B8CFCE',panel:'#DCE8E2'};

@@ -44,3 +44,48 @@ explicitly and hash-checked; they are not bundled into the source repository.
 Renderer: pinned pdoom-video FSPass primitives under MIT; original timeline,
 compositions and export/evaluation adapter. This is not the entire upstream engine.
 No upstream song, stock scenes, artwork, lyric file or fonts are redistributed.
+
+## Concrete GPT/Opus API adapter (optional, live use unverified here)
+
+`adapters/model_api.py` implements OpenAI Responses and Anthropic Messages requests
+without requiring their SDKs. The exact model ID is mandatory. Configure credentials
+through your environment/secret manager; never put keys in a prompt or repository.
+The adapter rejects calls unless `--allow-paid-api` is explicitly supplied. No paid
+call was made in the benchmark. Each invocation makes one request with no hidden
+retry; the production loop caps attempts at three (at most three author plus three
+inspection requests). Token caps limit output size, not total dollar cost.
+
+After separately authorizing your API budget and configuring the appropriate key:
+
+```sh
+python scripts/one_prompt.py --prompt-file your-brief.txt \
+  --author-command '["python","adapters/model_api.py","--provider","openai","--model","YOUR_MODEL_ID","--allow-paid-api"]' \
+  --speech-model-dir models/kokoro --out runs/new-brief-001 --trust-scene-code
+```
+
+Use `--provider anthropic` and your explicit Opus model ID for Anthropic. Select a
+model that accepts image input for the inspection phase. The wrapper extracts an
+initial contract from the one free-form prompt, logs it, and freezes it before
+rendering or repairs. It adds a mandatory human `PROMPT-FIDELITY` requirement:
+model-proposed constraints are not user-approved truth. The first planning call
+also supplies the first candidate, so the total cap remains six API requests.
+Fixture coverage exercises this whole extraction/render/inspection path; live
+model behavior remains unverified.
+
+If you already have independently reviewed constraints, use `python -m vch produce`
+with `--constraints your-constraints.json` instead. The reference constraint file
+requires a 192-second Mandarin browser film; it is not a universal contract.
+
+The adapter sends the actual decoded contact-sheet image for visual inspection.
+It preserves the explicit limitation that static images cannot certify motion or
+speech quality. Returned API model/response IDs and usage are retained separately
+from self-reported model claims. Fixture tests cover payloads, incomplete responses,
+missing credentials, no-spend defaults and review limitations; they are not live
+API integration tests.
+
+Official schema sources checked 2026-10-03:
+
+- https://developers.openai.com/api/docs/guides/images-vision
+- https://developers.openai.com/api/docs/guides/structured-outputs
+- https://developers.openai.com/api/docs/guides/migrate-to-responses
+- https://platform.claude.com/docs/en/api/messages/create

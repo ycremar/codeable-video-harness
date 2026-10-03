@@ -32,6 +32,10 @@ The original v0.1 CLI did not accept prompts and could not make a reference-scal
 narrated film. The new production path accepts a brief, freezes requirements,
 invokes a configured author, synthesizes Mandarin narration locally, renders and
 measures the encoded output, then feeds failures back for bounded repairs.
+`scripts/one_prompt.py` accepts just the free-form creative prompt plus runtime
+configuration, proposes and freezes a contract, and retains human prompt-fidelity
+review. Optional GPT/Opus API adapters are included; their live model path is
+unverified here.
 
 - [Single-prompt protocol](docs/SINGLE_PROMPT.md)
 - [Installation and benchmark replay](docs/PRODUCTION_SETUP.md)

@@ -33,6 +33,11 @@ pending unless a real authorized reviewer supplies an artifact-bound decision.
 
 Modes:
 
+0. `python scripts/one_prompt.py --prompt-file ... --author-command '[...]'
+   --out ... --trust-scene-code` extracts and logs proposed constraints from just
+   the prompt, then freezes them and starts production. The model's extraction
+   is not human-approved. A mandatory `PROMPT-FIDELITY` human criterion checks
+   omissions and weakened interpretations against the original prompt.
 1. `vch produce --prompt-file ... --constraints ... --out ...` creates an immutable
    author packet for the current coding agent. This is an agent workspace handoff.
 2. Add `--author-command '["executable","arg"]' --trust-scene-code` for an
