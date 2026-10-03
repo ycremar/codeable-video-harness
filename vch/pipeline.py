@@ -75,11 +75,20 @@ def decode_frame(path, t, target):
 
 
 def render(spec, root, out, trust_code=False):
+    from .backends import create_renderer
+    renderer = create_renderer(spec, root, trust_code)
+    try:
+        return _render(spec, root, out, renderer)
+    finally:
+        if hasattr(renderer, 'close'):
+            renderer.close()
+
+
+def _render(spec, root, out, renderer):
     out = Path(out).resolve()
     if out.exists():
         raise FileExistsError('Use a new run directory: immutable runs are never overwritten')
     before = source_manifest(root, spec)
-    renderer = SceneRenderer(spec, root, trust_code)
     out.mkdir(parents=True)
     (out/'contract.json').write_text(json.dumps(spec, ensure_ascii=False, indent=2))
     audio = make_audio(spec, root, out)
@@ -96,11 +105,22 @@ def render(spec, root, out, trust_code=False):
     with (out/'render.log').open('wb') as log, (out/'trace.jsonl').open('w') as trace:
         proc = subprocess.Popen(args, stdin=subprocess.PIPE, stderr=log)
         try:
-            for i in range(n):
-                t = i/fps
-                frame = renderer.sampled(t)
-                trace.write(canonical({'frame': i, 't': t, 'elements': frame.elements})+'\n')
-                proc.stdin.write(frame.image.tobytes())
+            if hasattr(renderer,'stream'):
+                received=[0]
+                def consume(meta,image):
+                    if meta['frame']!=received[0]:raise ValueError('Out-of-order streamed frame')
+                    trace.write(canonical(meta)+'\n');proc.stdin.write(image.tobytes());received[0]+=1
+                    if received[0]%(fps*10)==0:print(f'Render {received[0]}/{n} frames',flush=True)
+                renderer.stream(consume,n)
+                if received[0]!=n:raise ValueError('Missing streamed frames')
+            else:
+                for i in range(n):
+                    t = i/fps
+                    frame = renderer.sampled(t)
+                    trace.write(canonical({'frame': i, 't': t, 'elements': frame.elements})+'\n')
+                    proc.stdin.write(frame.image.tobytes())
+                    if i % (fps*10) == 0:
+                        print(f'Render {i}/{n} frames', flush=True)
             proc.stdin.close()
             if proc.wait(timeout=180):
                 raise RuntimeError('Encoder failed; inspect render.log')
@@ -143,6 +163,8 @@ def render(spec, root, out, trust_code=False):
     sheet.save(out/'contact-sheet.jpg',quality=90)
     evidence = {'samples': samples, 'determinism_mismatches': differences, 'sampling': 'boundaries + midpoint + periodic; not exhaustive perception',
                 'probe': probe(out/'video.mp4')}
+    if spec.get('narration_metadata'):
+        evidence['narration'] = json.loads(contained(root,spec['narration_metadata']).read_text())
     (out/'evidence.json').write_text(json.dumps(evidence,indent=2))
     manifest = {'source': before, 'video_sha256': digest(out/'video.mp4'),
                 'trace_sha256': digest(out/'trace.jsonl'), 'evidence_sha256': digest(out/'evidence.json'),
@@ -151,6 +173,7 @@ def render(spec, root, out, trust_code=False):
                             'ffmpeg': command(['ffmpeg','-version']).stdout.decode().splitlines()[0]},
                 'model': {'provider':'unverified/not invoked','model_id':None},
                 'audio': spec.get('audio',{'mode':'none'})}
+    manifest['runtime']['renderer'] = getattr(renderer, 'provenance', {'name':'Pillow'})
     binding = {k:manifest[k] for k in ('source','video_sha256','trace_sha256','evidence_sha256','contract_sha256')}
     manifest['review_binding'] = hashlib.sha256(canonical(binding).encode()).hexdigest()
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2))

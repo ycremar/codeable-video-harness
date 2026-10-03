@@ -57,8 +57,8 @@ closed. Changes to evaluators require owner review, not the candidate-author age
 
 To integrate another engine, produce the same video, trace, samples and manifest
 contract, then supply a frame adapter for determinism tests. Do not assume its
-telemetry is trustworthy merely because it matches this JSON shape. No additional
-backend is implemented in v0.1.
+telemetry is trustworthy merely because it matches this JSON shape. The pdoom primitive adapter now produces this evidence through the same
+pipeline; it does not claim full upstream Engine integration.
 
 ## Preventing evaluation gaming
 
@@ -71,3 +71,13 @@ accidental changes, not an attacker with write access to the entire evidence set
 This harness does not assert accessibility or flash safety. High-intensity motion,
 full-screen flashes, complex photos and dense typography need specialized checks
 and human review before distribution.
+
+## Production evidence additions
+
+All of these are explicitly proxies: `planned_scene_count` counts declared windows;
+`planned_visual_kinds` counts declared mechanisms (not perceived variety);
+`narration_seconds` sums independently synthesized phrase placements (not ASR);
+`caption_timing_error_ms` compares captions with those placements (not pronunciation
+or word alignment). Missing evidence remains unmeasured. Counts cannot establish
+reference similarity. The source manifest also binds executing harness/adapter code
+when candidate projects live in separate production-session directories.
