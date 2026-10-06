@@ -5,6 +5,7 @@ from pathlib import Path
 from .core import load_contract, SceneRenderer, source_manifest
 from .pipeline import render, audit
 from .evaluate import evaluate, review_template, METRIC_TYPES
+from .backends import create_renderer
 
 
 def main():
@@ -19,8 +20,23 @@ def main():
     p=sub.add_parser('audit');p.add_argument('run');p.add_argument('--project-root')
     p=sub.add_parser('review-template');p.add_argument('run');p.add_argument('--out',required=True)
     p=sub.add_parser('compare');p.add_argument('first');p.add_argument('second')
+    p=sub.add_parser('produce')
+    prompt=p.add_mutually_exclusive_group(required=True)
+    prompt.add_argument('--prompt');prompt.add_argument('--prompt-file')
+    p.add_argument('--constraints',required=True);p.add_argument('--out',required=True)
+    author=p.add_mutually_exclusive_group()
+    author.add_argument('--candidate-file');author.add_argument('--author-command',help='JSON argv array; reads request from stdin, returns JSON')
+    p.add_argument('--speech-model-dir');p.add_argument('--trust-scene-code',action='store_true')
+    p.add_argument('--max-attempts',type=int,default=3);p.add_argument('--author-timeout',type=int,default=300)
     args=parser.parse_args()
     try:
+        if args.cmd=='produce':
+            from .production import produce
+            result=produce(args.prompt or Path(args.prompt_file).read_text(),json.loads(Path(args.constraints).read_text()),args.out,
+                candidate_file=args.candidate_file,author_command=json.loads(args.author_command) if args.author_command else None,
+                model_dir=args.speech_model_dir,trust_code=args.trust_scene_code,max_attempts=args.max_attempts,author_timeout=args.author_timeout)
+            print(json.dumps(result,ensure_ascii=False,indent=2))
+            raise SystemExit(0 if result['state']=='accepted_by_contract' else 3 if result['state']=='needs_review' else 2)
         if args.cmd=='metrics':
             print(json.dumps(METRIC_TYPES,indent=2));return
         if args.cmd in ('validate','packet','run','still'):
@@ -45,7 +61,10 @@ def main():
             path=Path(args.out)
             if path.exists(): raise FileExistsError('Refuse to overwrite an existing still')
             path.parent.mkdir(parents=True,exist_ok=True)
-            SceneRenderer(spec,root,args.trust_scene_code).sampled(args.time).image.save(path)
+            renderer=create_renderer(spec,root,args.trust_scene_code)
+            try: renderer.sampled(args.time).image.save(path)
+            finally:
+                if hasattr(renderer,'close'): renderer.close()
             print(path);return
         if args.cmd=='run':
             out=render(spec,root,args.out,args.trust_scene_code)

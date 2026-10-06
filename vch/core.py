@@ -8,6 +8,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import os
 from pathlib import Path
 from dataclasses import dataclass, field
 from PIL import Image, ImageDraw, ImageFont, ImageColor
@@ -40,6 +41,10 @@ def finite(x):
 def validate(s, root):
     if s.get("version") != 1:
         raise ValueError("Unsupported contract version")
+    if s.get('backend','pillow') not in ('pillow','pdoom'):
+        raise ValueError('Unknown renderer backend')
+    if s.get('backend') == 'pdoom' and s.get('render',{}).get('samples',1) != 1:
+        raise ValueError('pdoom primitive adapter currently supports one temporal sample only')
     v = s["video"]
     for k in ("width", "height", "fps"):
         if type(v[k]) is not int or v[k] <= 0:
@@ -130,14 +135,24 @@ def load_contract(path):
 def source_manifest(root, spec):
     # Hash all project code/prompts/assets, not only imported entry points.
     # No secrets or source bytes are copied into the report.
-    excluded = {".git", "runs", ".venv", "__pycache__", "reference-inputs"}
+    excluded = {".git", "runs", ".venv", "__pycache__", "reference-inputs", "node_modules", "dist", "models"}
     files = {}
-    for p in sorted(Path(root).rglob("*")):
-        if p.is_file() and not any(x in excluded or x.endswith('.egg-info') for x in p.relative_to(root).parts):
-            if p.name == ".env" or p.suffix in (".pyc", ".zip", ".bundle"):
-                continue
-            files[str(p.relative_to(root))] = digest(p)
-    return {"contract": hashlib.sha256(canonical(spec).encode()).hexdigest(), "files": files}
+    for current,dirs,names in os.walk(root):
+        dirs[:] = sorted(d for d in dirs if d not in excluded and not d.endswith('.egg-info'))
+        for name in sorted(names):
+            p=Path(current)/name
+            if name == '.env' or p.suffix in ('.pyc','.zip','.bundle'):continue
+            files[str(p.relative_to(root))]=digest(p)
+    # Bind the executing harness too, even when an author project is staged elsewhere.
+    implementation={};base=Path(__file__).resolve().parents[1]
+    for folder in [base/'vch',base/'backends/pdoom']:
+        if not folder.exists():continue
+        for current,dirs,names in os.walk(folder):
+            dirs[:]=sorted(d for d in dirs if d not in excluded)
+            for name in sorted(names):
+                p=Path(current)/name
+                if p.suffix in ('.py','.ts','.json','.html'):implementation[str(p.relative_to(base))]=digest(p)
+    return {"contract": hashlib.sha256(canonical(spec).encode()).hexdigest(), "files": files, 'implementation':implementation}
 
 
 def luminance(color):

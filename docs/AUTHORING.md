@@ -71,3 +71,13 @@ Do not put secrets in the project. Run untrusted generated code in a separate
 disposable VM/container. A project-path check cannot contain arbitrary Python
 imports or side effects. CPU/memory/time budgets should be enforced by the job
 runner. No external LLM generation loop is automatically invoked by the CLI.
+
+## Single-prompt production
+
+See SINGLE_PROMPT.md for the author command/replay protocol. The production loop
+freezes requirements, records the initial prompt and every response, rejects
+unauthorized writes, renders immutable attempts, and requests an artifact-bound
+agent inspection before finishing a live-author run. This inspection is a
+self-attestation and cannot satisfy a human-review gate. The browser backend uses
+declarative scene descriptions; its supported visual mechanisms are a vocabulary,
+not evidence that a new subject has been understood.

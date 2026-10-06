@@ -6,3 +6,6 @@ runs/
 .env
 reference-inputs/
 assets/fonts/NotoSerifSC.ttf
+node_modules/
+dist/
+models/
