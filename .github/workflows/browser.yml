@@ -20,3 +20,5 @@ jobs:
       - run: python scripts/prepare_fonts.py
       - run: npm ci --prefix backends/pdoom && npm run build --prefix backends/pdoom
       - run: VCH_TEST_BROWSER=1 python -m unittest discover -s tests -p test_browser.py -v
+      # Chromium's sandbox often cannot start on hosted CI runners (restricted user namespaces); local runs keep it on.
+      - run: VCH_TEST_BROWSER=1 VCH_CHROMIUM_NO_SANDBOX=1 python -m unittest discover -s tests -p test_html_backend.py -v

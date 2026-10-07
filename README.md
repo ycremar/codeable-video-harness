@@ -17,11 +17,11 @@ and FFmpeg export. Opus/GPT authors code; it is not the pixel-rendering engine.
 | Layer | In the reference / upstream | In this repository |
 |---|---|---|
 | Code author | The film claims Opus; exact model provenance unverified | Any coding agent through the authoring packet |
-| Render engine | pdoom-video | Python/Pillow plus tested browser adapter executing pdoom FSPass primitives |
+| Render engine | pdoom-video | Python/Pillow; browser adapter executing pdoom FSPass primitives; HTML composition backend (Chromium) |
 | Encode | FFmpeg | FFmpeg |
 | Evaluation | Visual iteration described on screen | Requirement contracts, evidence, tests and review gates |
 
-This repository implements production/evaluation orchestration and two render
+This repository implements production/evaluation orchestration and three render
 backends. The browser adapter vendors a small, pinned MIT subset of pdoom-video;
 it does **not** use the complete upstream Engine or its film assets. See
 [pdoom engine notes](docs/PDOOM_ENGINE.md) for the precise boundary.
@@ -55,6 +55,55 @@ pending. All 52 local tests pass, including browser integration. The first full
 render caught an order-dependent canvas bug; its failed report and the passing
 rerender evidence are retained. This is progress toward the reference's ambition,
 not a claim of equal creative quality.
+
+## HTML compositions: how most public "Opus 5.5" videos are made
+
+A [study of 475 public code-rendered videos](docs/OPUS_VIDEO_RESEARCH.md) found the
+same core recipe across HyperFrames, Remotion and single-file builds:
+
+- An agent writes a web page that exposes a pure `seek(t)`.
+- Headless Chromium captures it frame by frame, sometimes with blended sub-frames.
+- FFmpeg encodes the result.
+- Sounds are placed by their measured transient peak.
+- Stills or one frame per beat are checked before the full render.
+
+The study also covers the requested [@mattworkman](https://skillry.dev/ai-videos/opus-5-5/mattworkman-309357)
+video: a fal-generated hero clip wrapped in a Three.js explainer that reuses the
+generated image as data.
+
+The `html` backend runs that medium inside this harness's evidence model. Visible
+text is measured from the DOM, and seeks are checked forward/reverse/shuffled on
+pixels and telemetry. Network access is limited to loopback, and the harness measures
+the encoded MP4 rather than the browser preview.
+
+```sh
+python -m pip install -r requirements.txt playwright==1.51.0
+python -m playwright install chromium
+python -m vch storyboard examples/html.json
+python -m vch stills examples/html.json --beats --out runs/stills-001 --trust-scene-code
+python -m vch run examples/html.json --out runs/code-to-frames-001 --trust-scene-code
+python -m vch profile runs/code-to-frames-001/video.mp4 --out runs/profile-001
+```
+
+The example is `compositions/code-to-frames/index.html`, an original 12-second film:
+
+- Cue sounds are synthesized on 19 declared hits.
+- Its contract passes 20 machine requirements: duration, frame count, timestamps,
+  loudness and true peak after AAC encoding, seek determinism, hit sync, copy, size,
+  contrast, safe area, text overlap, dead time and single-frame pops.
+- The run exits 3 because the human craft review stays pending.
+
+Its first full render failed the seek check on a cached-DOM bug, and exposed
+Chromium partial-raster nondeterminism. Both were fixed without changing the
+thresholds.
+
+`vch profile` measures any video or audio file, such as a licensed reference, a
+song or your candidate. It reports cuts, visual events, holds, pops, loudness,
+onsets, tempo and phase. It describes pacing; it is not a quality score or a
+licence to copy style.
+
+Claude Code users get the `codeable-video` skill (`.claude/skills/`) and
+`CLAUDE.md` → `AGENTS.md`.
 
 ## Run the lightweight backend
 
@@ -128,7 +177,17 @@ or independently authenticated hosted model generation was performed.
   or licensed audio input; complete-duration checks for supplied audio.
 - Hard technical checks, labeled instrumentation/pixel proxies and review gates.
 - Actual encoded-frame QA, contract/source hashes, immutable render directories.
-- CLI for authoring packets, stills, render, evaluate, audit and comparison.
+- CLI for authoring packets, stills (single, per-beat or listed times), storyboards,
+  media profiles, render, evaluate, audit and comparison.
+- HTML composition backend with a virtual clock, seeded randomness, seek adapters
+  (`__vch.seek`, `window.seek`, paused `__timelines`, CSS/Web Animations), DOM/SVG
+  text telemetry with pixel-backed contrast, loopback-only networking and optional
+  sub-frame motion blur.
+- Declared `timing.hits` with original synthesized cues; `mix` audio placing
+  licensed layers by measured peak; linear loudness targeting with a peak ceiling.
+- Decoded-evidence metrics: BS.1770 loudness and true peak after encoding, frame
+  count and timestamp jitter, text overlap, dead time, single-frame pops, loop seam
+  and hit sync.
 - Landscape explanation + portrait Chinese ATL example; intentional broken scene.
 - Unit/integration tests including unknown metrics, bad typography, tampering,
   stale reviews and stateful/non-deterministic rendering.
@@ -146,12 +205,22 @@ semantic fact checker, audience study, universal aesthetics metric, full flash
 safety certification, platform publishing or hosted scheduler.
 OCR is optional and requires Tesseract plus the requested language pack. Voice
 assets can also enter as licensed audio. Captions for local TTS use actual
-phrase durations; automatic word-level forced alignment is not implemented. Beat checks use the declared beat grid, not
-detected onsets from arbitrary music.
+phrase durations; automatic word-level forced alignment is not implemented. `beat_cut_error_ms` uses
+the declared beat grid; `audio_hit_sync_ms` compares declared hits with transient peaks detected in
+the encoded audio; `vch profile` estimates tempo and phase from audio but not downbeats or meter.
+
+The HTML backend does not run HyperFrames or Remotion runtimes. It does not
+interpret `data-start` clip attributes or manage `<video>` seeking, and it calls
+no image, video, music or TTS generation APIs. Loudness targeting is one linear
+gain: there is no limiter, so a peak ceiling can stop a target from being reached,
+and that is reported. Blind audio/visual sync on published files measured at
+chance level, which is why hit sync is checked only against declared hits.
 
 Scene code is trusted executable Python. `--trust-scene-code` is an acknowledgement,
 not a sandbox. Use a disposable container/VM with no secrets and no network for
-agent-written code. Sampled checks cannot prove all possible times or every visual
+agent-written code. HTML compositions run inside Chromium with its sandbox on
+(`VCH_CHROMIUM_NO_SANDBOX=1` only where a container requires it), but that is
+defence in depth, not an OS boundary for untrusted code. Sampled checks cannot prove all possible times or every visual
 claim. A malicious scene can lie in telemetry; inspect decoded frames independently.
 
 ## Repository map
@@ -159,11 +228,16 @@ claim. A malicious scene can lie in telemetry; inspect decoded frames independen
 | Path | Purpose |
 |---|---|
 | `vch/` | Contract, production loop, narration, renderers, evaluator, CLI |
+| `vch/html_backend.py`, `vch/html_runtime.js` | HTML composition renderer and injected seek/telemetry runtime |
+| `vch/signals.py`, `vch/audio.py`, `vch/tools.py` | Decoded-media signals, cue/mix audio, stills/storyboard/profile tools |
+| `compositions/` | Agent-editable HTML compositions (`code-to-frames` example) |
 | `backends/pdoom/` | Original browser scene system + pinned MIT pdoom primitives |
 | `benchmarks/reference/` | Prompt, fixed contract, saved response and execution results |
 | `scenes/` | Agent-editable pure-time scene modules |
 | `examples/` | Requirements + style + timing, not hardwired visual templates |
 | `docs/REVERSE_ENGINEERING.md` | Recording evidence vs verified engine vs additions |
+| `docs/OPUS_VIDEO_RESEARCH.md` | Corpus study of public Opus 5.5 code-rendered videos and what changed here |
+| `.claude/skills/codeable-video/` | Claude Code skill for the production loop |
 | `docs/PDOOM_ENGINE.md` | pdoom-video attribution, native workflow and integration limits |
 | `docs/MEASUREMENT.md` | Metric meanings, coverage and anti-Goodhart rules |
 | `docs/AUTHORING.md` | Brief-to-code and repair protocol |

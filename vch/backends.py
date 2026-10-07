@@ -13,12 +13,14 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 from PIL import Image
 from .core import Frame, SceneRenderer, contained, finite
+from .html_backend import HtmlRenderer
 
 
 def create_renderer(spec, root, trust_code=False):
     name = spec.get('backend', 'pillow')
     if name == 'pillow': return SceneRenderer(spec, root, trust_code)
     if name == 'pdoom': return BrowserRenderer(spec, root, trust_code)
+    if name == 'html': return HtmlRenderer(spec, root, trust_code)
     raise ValueError(f'Unknown backend: {name}')
 
 

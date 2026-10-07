@@ -7,6 +7,8 @@ import subprocess
 from pathlib import Path
 import numpy as np
 from PIL import Image
+from . import signals
+from .core import normalized_hits
 from .pipeline import audit, command
 
 
@@ -17,11 +19,102 @@ METRIC_TYPES = {
     'minimum_text_size_px':'proxy','minimum_contrast':'proxy','safe_area_violations':'proxy',
     'minimum_text_hold_s':'proxy','beat_cut_error_ms':'proxy','motion_fraction':'proxy',
     'ocr_contains':'proxy','planned_scene_count':'proxy','planned_visual_kinds':'proxy',
-    'narration_seconds':'proxy','caption_timing_error_ms':'proxy'
+    'narration_seconds':'proxy','caption_timing_error_ms':'proxy',
+    'integrated_loudness_lufs':'hard','true_peak_dbtp':'hard','encoded_frame_count':'hard',
+    'frame_timestamp_jitter_ms':'hard','text_overlap_violations':'proxy','max_static_hold_s':'proxy',
+    'single_frame_pops':'proxy','loop_seam_ratio':'proxy','audio_hit_sync_ms':'proxy'
 }
 
 
+SETTLED_OPACITY_FRACTION = .95
+
+
+def _settled_text(elements, fraction):
+    """Split text observations into settled ones and fade transitions (opacity < fraction × that id's max)."""
+    if type(fraction) not in (int, float) or not 0 < fraction <= 1:
+        raise ValueError('settled_fraction must be in (0, 1]')
+    peak = {}
+    for e in elements:
+        peak[e['id']] = max(peak.get(e['id'], 0), e.get('opacity', 1))
+    settled = [e for e in elements if e.get('opacity', 1) >= fraction*peak[e['id']]]
+    return settled, len(elements)-len(settled)
+
+
+def _decoded(evidence, key):
+    if key not in evidence:
+        raise ValueError(f'Missing decoded evidence "{key}"; re-render with this harness version')
+    return evidence[key]
+
+
+def _loudness(metric, evidence):
+    analysis = _decoded(evidence, 'audio_analysis')
+    key = 'integrated_lufs' if metric == 'integrated_loudness_lufs' else 'true_peak_dbtp'
+    if analysis.get(key) is None:
+        raise ValueError('Audio too short/silent for a BS.1770 measurement')
+    if metric == 'integrated_loudness_lufs':
+        return analysis[key], 'ffmpeg ebur128 BS.1770 integrated loudness of the encoded (AAC) audio; not perceived mix quality'
+    return analysis[key], 'ffmpeg ebur128 4x-oversampled true peak of the encoded audio; decoder/platform resampling can differ'
+
+
+def _frame_timing(metric, evidence):
+    timing = _decoded(evidence, 'frame_timing')
+    if metric == 'encoded_frame_count':
+        return timing['frames'], 'ffprobe packet count of the encoded video stream'
+    return timing['max_jitter_ms'], 'max |pts - (pts0 + i/fps)| over encoded packets; constant-rate grid check only'
+
+
+def _text_overlaps(params, trace):
+    min_fraction = params.get('min_fraction', .25)
+    if type(min_fraction) not in (int, float) or not 0 < min_fraction <= 1:
+        raise ValueError('min_fraction must be in (0, 1]')
+    ignore = set(params.get('ignore_ids', []))
+    if not any(e.get('type') == 'text' for f in trace for e in f['elements']):
+        raise ValueError('No text telemetry')
+    count = sum(len(signals.overlap_pairs(f['elements'], min_fraction=min_fraction, ignore=ignore)) for f in trace)
+    return count, f'frame×pair count of distinct text boxes intersecting by ≥{min_fraction:.0%} of the smaller box; layered designs may intend overlap'
+
+
+def _motion_metric(metric, params, spec, evidence):
+    motion = _decoded(evidence, 'decoded_motion'); fps = spec['video']['fps']
+    exclude = signals.check_windows(params.get('exclude'))
+    note = f"; excluded windows {exclude}" if exclude else ''
+    if metric == 'max_static_hold_s':
+        delta = params.get('still_delta', signals.DEFAULT_STILL_DELTA)
+        hold, start = signals.longest_still_hold(motion['diff'], fps=fps, still_delta=delta, exclude=exclude)
+        where = f' starting {start:.3f}s' if start is not None else ''
+        return hold, f'longest decoded run with mean luma change <{delta}/255 per frame{where}{note}; slow drifts count as still'
+    if metric == 'single_frame_pops':
+        pops = signals.single_frame_pops(motion['diff'], motion['bridge'], fps=fps,
+                                         ratio=params.get('ratio', signals.DEFAULT_POP_RATIO),
+                                         floor=params.get('floor', signals.DEFAULT_POP_FLOOR), exclude=exclude)
+        return len(pops), f'decoded frames unlike both neighbours (one-frame flashes/jumps) at {pops[:8]}{note}; intentional flashes count'
+    ratio = signals.loop_seam_ratio(motion, fps=fps, still_delta=params.get('still_delta', signals.DEFAULT_STILL_DELTA))
+    return ratio, 'last→first decoded-frame change relative to neighbouring frame steps; 0 = identical frames'
+
+
+def _hit_sync(spec, evidence):
+    hits = [h['t'] for h in normalized_hits(spec.get('timing', {}))]
+    if not hits:
+        raise ValueError('No declared timing.hits')
+    onsets = _decoded(evidence, 'audio_analysis').get('onsets', [])
+    if not onsets:
+        raise ValueError('No detectable audio onsets')
+    errors = [min(abs(o-h) for o in onsets)*1000 for h in hits]
+    worst = max(range(len(hits)), key=errors.__getitem__)
+    return errors[worst], f'max distance from {len(hits)} declared hits to detected transient peaks (worst at {hits[worst]:.3f}s); onsets are not attributed to sources'
+
+
 def measure(metric, params, spec, evidence, trace, out):
+    if metric in ('integrated_loudness_lufs', 'true_peak_dbtp'):
+        return _loudness(metric, evidence)
+    if metric in ('encoded_frame_count', 'frame_timestamp_jitter_ms'):
+        return _frame_timing(metric, evidence)
+    if metric == 'text_overlap_violations':
+        return _text_overlaps(params, trace)
+    if metric in ('max_static_hold_s', 'single_frame_pops', 'loop_seam_ratio'):
+        return _motion_metric(metric, params, spec, evidence)
+    if metric == 'audio_hit_sync_ms':
+        return _hit_sync(spec, evidence)
     if metric == 'planned_scene_count':
         return len(spec['scenes']), 'declared timeline windows, not detected cuts or narrative quality'
     if metric == 'planned_visual_kinds':
@@ -56,7 +149,9 @@ def measure(metric, params, spec, evidence, trace, out):
     elements=[e for f in trace for e in f['elements'] if e.get('type')=='text']
     if metric in ('text_present','text_absent'):
         if not elements: raise ValueError('No text telemetry')
-        texts='\n'.join(e['text'] for e in elements)
+        # text-group = visible text of one data-vch-id element whose words are separate nodes.
+        readable=[e for f in trace for e in f['elements'] if e.get('type') in ('text','text-group')]
+        texts='\n'.join(e['text'] for e in readable)
         needles=params['strings']
         if not needles: raise ValueError('Empty text query')
         found=[q in texts for q in needles]
@@ -66,7 +161,15 @@ def measure(metric, params, spec, evidence, trace, out):
         return min(e['size'] for e in elements), 'instrumented font size in output pixels; not perceived legibility'
     if metric == 'minimum_contrast':
         if not elements: raise ValueError('No text telemetry')
-        return min(e['contrast'] for e in elements), 'declared text/background contrast; overlapping artwork not modeled'
+        settled,transitional=_settled_text(elements,params.get('settled_fraction',SETTLED_OPACITY_FRACTION))
+        known=[e['contrast'] for e in settled if e.get('contrast') is not None]
+        unknown=len(settled)-len(known)
+        if unknown and not params.get('allow_unknown'):
+            raise ValueError(f'{unknown} text observations have unknown contrast (e.g. transparent or gradient fill); set allow_unknown only if that is acceptable')
+        if not known: raise ValueError('No text observation has a measurable contrast')
+        source='declared or rendered-pixel text/background contrast; overlapping artwork not modeled'
+        if transitional: source+=f'; {transitional} fade-in/out observations below the element\'s settled opacity excluded'
+        return min(known), source+(f'; {unknown} unknown observations excluded by contract' if unknown else '')
     if metric == 'safe_area_violations':
         if not elements: raise ValueError('No text telemetry')
         l,t,r,b=params.get('margins',[0,0,0,0]); w,h=spec['video']['width'],spec['video']['height']

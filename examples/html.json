@@ -1,0 +1,45 @@
+{
+  "version": 1, "title": "CODE TO FRAMES", "seed": 7,
+  "backend": "html",
+  "html": {"entry": "compositions/code-to-frames/index.html"},
+  "video": {"width": 1280, "height": 720, "fps": 30, "duration": 12},
+  "render": {"samples": 1},
+  "assets": [{"path": "assets/fonts/Inter.ttf", "source": "https://github.com/google/fonts/tree/main/ofl/inter", "license": "SIL OFL 1.1; assets/fonts/Inter-OFL.txt"}],
+  "audio": {"mode": "procedural", "gain": 0.8, "bed": false, "loudness_target": -22, "peak_ceiling_dbfs": -2},
+  "timing": {"bpm": 120, "beat_offset": 0, "hits": [
+    0.5, 1.0, {"t": 2.0, "kind": "impact"}, 2.5, 3.0, 3.5, {"t": 4.0, "kind": "impact"}, 4.5, 5.0, 5.5,
+    {"t": 6.0, "kind": "impact"}, 6.5, {"t": 7.0, "kind": "chime"}, 7.5, {"t": 8.0, "kind": "impact"},
+    {"t": 9.0, "kind": "chime"}, {"t": 10.0, "kind": "impact"}, 10.5, {"t": 11.0, "kind": "chime"}]},
+  "qa": {"sample_every": 1},
+  "scenes": [
+    {"id": "prompt", "start": 0, "end": 2, "params": {"beat": "a dot stretches into a prompt field; the prompt types itself"}},
+    {"id": "contract", "start": 2, "end": 4, "params": {"beat": "the field becomes a card; hard/proxy/human rows land on beats"}},
+    {"id": "time", "start": 4, "end": 6, "params": {"beat": "the card compresses into a timeline; frame ticks and a counter"}},
+    {"id": "render", "start": 6, "end": 8, "params": {"beat": "a dark flood grows from the playhead; a measured line draws on"}},
+    {"id": "repair", "start": 8, "end": 10, "params": {"beat": "three checks; the failing one flips on the downbeat"}},
+    {"id": "evidence", "start": 10, "end": 12, "params": {"beat": "the flood shrinks into the chip; underline and wordmark settle"}}
+  ],
+  "requirements": [
+    {"id": "DUR", "description": "Exactly 12 seconds", "kind": "hard", "metric": "duration_s", "op": "eq", "target": 12.0},
+    {"id": "W", "description": "1280 pixels wide", "kind": "hard", "metric": "width_px", "op": "eq", "target": 1280},
+    {"id": "H", "description": "720 pixels high", "kind": "hard", "metric": "height_px", "op": "eq", "target": 720},
+    {"id": "FPS", "description": "30 fps", "kind": "hard", "metric": "fps", "op": "eq", "target": 30},
+    {"id": "FRAMES", "description": "Exactly 360 encoded frames; no duplicated end frame", "kind": "hard", "metric": "encoded_frame_count", "op": "eq", "target": 360},
+    {"id": "PTS", "description": "Evenly spaced frame timestamps", "kind": "hard", "metric": "frame_timestamp_jitter_ms", "op": "le", "target": 1},
+    {"id": "AUDIO", "description": "Original synthesized cue audio exists", "kind": "hard", "metric": "audio_present", "op": "eq", "target": true},
+    {"id": "LOUD-MIN", "description": "Integrated loudness after AAC encode at least -24 LUFS", "kind": "hard", "metric": "integrated_loudness_lufs", "op": "ge", "target": -24},
+    {"id": "LOUD-MAX", "description": "Integrated loudness after AAC encode at most -20 LUFS", "kind": "hard", "metric": "integrated_loudness_lufs", "op": "le", "target": -20},
+    {"id": "TRUE-PEAK", "description": "True peak after AAC encode at most -1 dBTP", "kind": "hard", "metric": "true_peak_dbtp", "op": "le", "target": -1},
+    {"id": "SEEK", "description": "Sampled renders unaffected by seek order", "kind": "hard", "metric": "determinism_mismatches", "op": "eq", "target": 0},
+    {"id": "HITS", "description": "A detectable sound lands within 20 ms of every declared hit", "kind": "proxy", "metric": "audio_hit_sync_ms", "op": "le", "target": 20},
+    {"id": "COPY", "description": "Key lines appear in visible-text telemetry", "kind": "proxy", "metric": "text_present", "params": {"strings": ["One prompt.", "becomes a contract.", "Every frame is f(t).", "Repair what failed.", "Evidence, not vibes."]}, "op": "eq", "target": true},
+    {"id": "FONT", "description": "All visible text at least 22 px", "kind": "proxy", "metric": "minimum_text_size_px", "op": "ge", "target": 22},
+    {"id": "CONTRAST", "description": "Text colour vs rendered backing at least 4.5:1", "kind": "proxy", "metric": "minimum_contrast", "op": "ge", "target": 4.5},
+    {"id": "SAFE", "description": "Text stays inside 64 px side and 40 px top/bottom margins", "kind": "proxy", "metric": "safe_area_violations", "params": {"margins": [64, 40, 64, 40]}, "op": "eq", "target": 0},
+    {"id": "OVERLAP", "description": "Outgoing text leaves before incoming text occupies its space", "kind": "proxy", "metric": "text_overlap_violations", "op": "eq", "target": 0},
+    {"id": "DEAD-TIME", "description": "No decoded interval longer than 1.5 s without visible change", "kind": "proxy", "metric": "max_static_hold_s", "op": "le", "target": 1.5},
+    {"id": "POPS", "description": "No one-frame flashes or jumps", "kind": "proxy", "metric": "single_frame_pops", "op": "eq", "target": 0},
+    {"id": "GRID", "description": "Declared scene cuts fall on the 120 BPM grid", "kind": "proxy", "metric": "beat_cut_error_ms", "op": "le", "target": 1},
+    {"id": "CRAFT", "description": "Each transition visibly comes from the previous state and the loop reads at normal speed", "kind": "human", "rubric": "Watch the full clip with sound at normal speed. Does every scene grow out of the previous one (no arbitrary crossfades)? Is each line readable without pausing? Do sounds feel attached to the motion they mark? Cite timestamps; proxies above cannot answer this."}
+  ]
+}

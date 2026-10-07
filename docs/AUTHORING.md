@@ -47,6 +47,97 @@ Fixed subframe samples average in linear light. Sample times are clipped to the
 scene boundary to avoid bleeding across cuts. More samples cost more compute;
 adaptive GPU sampling and general stateful simulations are not implemented.
 
+## HTML compositions (`backend: "html"`)
+
+This is the medium most code-rendered launch films use: HTML, CSS, SVG, Canvas or WebGL (GSAP
+and Three.js are common) that exposes a pure `seek(t)`. See
+[OPUS_VIDEO_RESEARCH.md](OPUS_VIDEO_RESEARCH.md). Declare:
+
+```json
+"backend": "html", "html": {"entry": "compositions/<name>/index.html"}
+```
+
+Scenes still declare contiguous windows; `module` is optional. Windows drive sampling,
+beat-grid and storyboard checks. Example: `examples/html.json` →
+`compositions/code-to-frames/index.html`.
+
+**Seek protocol.** Define `window.__vch.seek = (t) => { … }`, or `window.seek`. It may be async,
+and must set every visual property from `t`. Optionally:
+
+- Set `window.__vch.ready` to a promise; it is awaited before frames are drawn.
+- Register paused GSAP-like timelines on `window.__timelines`; they are seeked to `t`.
+- CSS and Web Animations are paused at `t`. CSS transitions are finished.
+
+**Provided before your scripts run:**
+
+- `__vch.harness`, `seed`, `fps`, `width`, `height`, `duration`, and `noise(key)` (stateless
+  seeded randomness).
+- Virtual clocks: `performance.now`, `Date` and rAF timestamps all equal composition time.
+- A seeded `Math.random` per page load.
+
+**Rules.** Most come from failures recorded in the corpus or caught by this harness.
+
+- **No state carried between frames.** That includes timers, accumulators and DOM caches keyed on
+  the previous frame. The forward/reverse/shuffled seek check compares pixels *and* telemetry. The
+  example's first full render failed it on a cached headline.
+- **Closed-form springs.** Sum one step response per target change. Snap settled springs to their
+  target.
+- **Outgoing text leaves before incoming text occupies its space** (`text_overlap_violations`).
+  Masked reveals should start fully hidden (≥120% translate). Text that is 15% or more visible
+  counts as visible.
+- **Wipes and floods take at least ~0.3 s.** Never switch a label's colour before its backing has
+  actually changed. Fade labels across the wipe instead.
+- **Package everything locally.** Fonts, images and libraries are declared assets or composition
+  files. Any non-local request (for example a Google Fonts `@import`) blocks the render. Media inside
+  the composition folder must be declared assets with source and licence.
+- **Text drawn into Canvas/WebGL is pixels, not telemetry.** Report it in `window.__vch.elements`
+  if a requirement depends on it.
+- **Mark semantic text blocks with `data-vch-id`.** This gives stable IDs for hold checks, and
+  `text-group` observations, so a line split into word spans still matches copy checks.
+- **Footage:** pre-extract image sequences, or encode all-intra, and swap frames inside `seek(t)`.
+  `<video>` seeking is not managed for you.
+
+**Preview** without the harness: serve the repository root (`python -m http.server`) and open the
+composition. The example loops on the wall clock when `__vch.harness` is absent.
+
+**Capture details:**
+
+- Chromium runs headless with its sandbox on. Set `VCH_CHROMIUM_NO_SANDBOX=1` only in containers
+  that require it.
+- WebGL uses software SwiftShader.
+- Partial re-raster is disabled because it made clip-edge pixels depend on the previous frame.
+- `render.samples` (1..16) blends sub-frames in linear light for motion blur.
+
+## Preview loop before the full render
+
+```sh
+python -m vch storyboard examples/html.json                 # timestamped plan from the contract
+python -m vch stills examples/html.json --beats --out runs/stills-001 --trust-scene-code
+python -m vch stills examples/html.json --times 0,2.5,6.2 --out runs/stills-002 --trust-scene-code
+```
+
+Look at `sheet.jpg`. `stills.json` lists the text, overlaps and smallest size for each still.
+These are raw frames from before encoding. Only `vch run` produces decoded evidence.
+
+## Brief sections → contract evidence
+
+Effective corpus briefs share a shape. Map each section to something checkable, or keep it human:
+
+| Brief section | Contract / evidence |
+|---|---|
+| Format, safe zone ("keep text clear of the TikTok UI") | `video`; `safe_area_violations` margins |
+| Timestamped storyboard or beat-grid state list | scene windows, `timing.bpm`, `timing.hits`; `vch storyboard` |
+| "A new idea every 1.5–2 s", "no dead time" | `max_static_hold_s` (exclude deliberate holds explicitly) |
+| "Labels never overlap during a morph" | `text_overlap_violations` |
+| Readable copy at pace | `minimum_text_size_px`, `minimum_text_hold_s`, `minimum_contrast`; human review at normal speed |
+| "A sound on every hit", SFX on events | `timing.hits` (+ `audio.mode: "mix"` with `align: "peak"`); `audio_hit_sync_ms` |
+| "−14 LUFS, −1 dBTP after encode" | `integrated_loudness_lufs`, `true_peak_dbtp` |
+| "Last frame = first frame" | `loop_seam_ratio` |
+| "No single-frame pops" | `single_frame_pops` |
+| Real product only, no invented numbers | `text_present` / `text_absent` plus a human truth review |
+| Transitions that "come from" the previous scene, taste, brand fit | human rubric with timestamps; no proxy stands in |
+| "Show me the storyboard / beat map before code" | `vch storyboard` / `vch stills`; record approval as a human requirement |
+
 ## Review ladder
 
 1. Validate contract, rights and module paths.

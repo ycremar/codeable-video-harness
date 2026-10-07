@@ -32,6 +32,15 @@ missing OCR language, non-finite value or stale review stays unmeasured/blocked.
 | black_fraction | Sampled decoded pixels below RGB threshold | Intentionally black shots count; no universal correct threshold |
 | motion_fraction | Changed pixel fraction between sampled frames | Cuts count; not optical flow, smoothness or excitement |
 | ocr_contains | Tesseract on decoded frames | Optional, sampled, language-dependent; can misrecognize text |
+| integrated_loudness_lufs | FFmpeg `ebur128` (BS.1770) on the **encoded** AAC audio | Gated programme loudness; not mix quality or perceived balance |
+| true_peak_dbtp | Same filter, 4× oversampled true peak | Player and platform resampling can differ; the corpus showed peaks rising after AAC encode |
+| encoded_frame_count | ffprobe packet count | Catches duplicated or dropped end frames; not visual content |
+| frame_timestamp_jitter_ms | Packet PTS vs an ideal constant-rate grid | A timing-grid check only |
+| text_overlap_violations | Frame×pair count of distinct text boxes (line fragments when present) intersecting by ≥ `min_fraction` (default 25%) of the smaller box | Layered designs may intend overlap (`ignore_ids`); occlusion by non-text art not modelled |
+| max_static_hold_s | Longest run of decoded frames whose mean luma change is < `still_delta` (0.5/255) | Slow drifts count as still; deliberate holds need explicit `exclude` windows frozen in the contract |
+| single_frame_pops | Decoded frames that differ from **both** neighbours by ≥ `floor` (8/255) and > `ratio` (3×) the neighbours' mutual difference | Intentional flash frames count; cuts do not. Exclude deliberate flashes explicitly |
+| loop_seam_ratio | Last→first decoded-frame change relative to neighbouring frame steps (0 = identical) | Meaningful only for loops; not perceived loop smoothness |
+| audio_hit_sync_ms | Max distance from each declared `timing.hits` time to a detected transient peak in the encoded audio | Onsets are not attributed to sources (a bed hit can satisfy a cue); soft sounds may be missed and then fail |
 
 ## Turning a vague requirement into a defensible contract
 
@@ -68,9 +77,34 @@ reviews to source+artifact hashes; don't accept old approvals on new renders. Do
 not automatically populate human pass decisions. The current hashes detect
 accidental changes, not an attacker with write access to the entire evidence set.
 
-This harness does not assert accessibility or flash safety. High-intensity motion,
+This harness does not assert accessibility or flash safety; `single_frame_pops` is a continuity check, not a photosensitive-epilepsy (flash/red-flash) test. High-intensity motion,
 full-screen flashes, complex photos and dense typography need specialized checks
 and human review before distribution.
+
+## Decoded-media evidence and HTML telemetry
+
+At render time the harness decodes its own MP4 again. It records per-frame luma change at an
+analysis size of at most 160 px (`decoded_motion`), packet timestamps (`frame_timing`), and BS.1770
+loudness plus transient peaks (`audio_analysis`). All of this goes into `evidence.json`, which the
+review binding hashes. Runs made before this version lack these keys, so the new metrics stay
+**unmeasured** for them, never pass. `vch profile` applies the same signal code to any input file,
+analysed at no more than 30 fps, so measurements of a reference and of a candidate are comparable.
+
+HTML telemetry comes from the live DOM. Observations are text nodes, plus `text-group`s for
+`data-vch-id` elements whose words sit in separate nodes. Policies:
+
+- **Visible:** effective opacity is at least 0.05, visibility is `visible`, and at least 15% of the
+  line box survives overflow and `clip-path` masks (inset, circle and polygon bounds).
+- **Size:** line-box height divided by the font's content-area ratio. That captures CSS transforms
+  and SVG scaling. Within ±4% of the CSS size, the CSS size is reported, because line boxes are
+  pixel-snapped.
+- **Contrast:** the rendered text colour (alpha × inherited opacity) against the median non-text
+  pixel inside its box on the captured frame. `minimum_contrast` ignores fade transitions:
+  observations below 95% (`settled_fraction`) of that element's own peak opacity. Unknown fills
+  such as gradient or transparent text keep the metric unmeasured unless `allow_unknown` is frozen
+  into the contract.
+- `text_present` / `text_absent` search text and text-group observations. Geometry metrics use
+  only text nodes.
 
 ## Production evidence additions
 

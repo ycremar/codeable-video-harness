@@ -14,6 +14,19 @@ from .pipeline import render
 from .evaluate import evaluate, review_template
 
 
+# Authors may write code and markup; media files carry rights and must arrive as declared assets.
+COMPOSITION_TEXT_SUFFIXES = {'.html', '.js', '.mjs', '.css', '.json', '.svg', '.glsl', '.txt'}
+
+
+def writable(rel):
+    """True for author-writable paths: scenes/*.py or text files under compositions/."""
+    if rel.is_absolute() or not rel.parts or any(part in ('..', '') or part.startswith('.') for part in rel.parts):
+        return False
+    if rel.parts[0] == 'scenes':
+        return rel.suffix == '.py'
+    return rel.parts[0] == 'compositions' and len(rel.parts) > 2 and rel.suffix.lower() in COMPOSITION_TEXT_SUFFIXES
+
+
 def frozen_check(spec, constraints):
     if spec.get('requirements') != constraints['requirements']:
         raise ValueError('Author changed frozen requirements or thresholds')
@@ -29,7 +42,7 @@ def author_packet(prompt, constraints, feedback=None):
             'instructions':(root/'docs/SINGLE_PROMPT.md').read_text(),
             'contract_example':json.loads((root/'examples/explainer.json').read_text()),
             'response_schema':{'contract':'Complete version-1 contract; preserve constraints.requirements and video exactly',
-                               'files':'Optional object of scenes/*.py relative paths -> UTF-8 source; no other writes accepted',
+                               'files':'Optional object of relative paths -> UTF-8 source: scenes/*.py or compositions/<name>/** text files (.html .js .css .json .svg .glsl); no other writes accepted',
                                'author':'Optional self-reported provenance, not verified model identity'},
             'feedback':feedback,'rules':['Return a single JSON object, no Markdown fences','Do not change frozen requirements',
                                        'Human reviews remain pending','Do not invoke paid services from scene code']}
@@ -74,9 +87,10 @@ def produce(prompt, constraints, out, candidate_file=None, author_command=None, 
             spec=response['contract'];frozen_check(spec,constraints)
             shutil.copytree(base/'assets/fonts',project/'assets/fonts')
             shutil.copytree(base/'scenes',project/'scenes',ignore=shutil.ignore_patterns('__pycache__'))
+            shutil.copytree(base/'compositions',project/'compositions')
             for path,content in response.get('files',{}).items():
                 rel=Path(path)
-                if rel.is_absolute() or rel.parts[0]!='scenes' or rel.suffix!='.py':raise ValueError('Author writes restricted to scenes/*.py')
+                if not writable(rel):raise ValueError('Author writes restricted to scenes/*.py and compositions/** text files (no media without rights records)')
                 dest=contained(project,path);dest.parent.mkdir(parents=True,exist_ok=True);dest.write_text(content)
             validate(spec,project)
             if any(s.get('narration') for s in spec['scenes']):

@@ -11,7 +11,20 @@ import math
 import os
 from pathlib import Path
 from dataclasses import dataclass, field
+import numpy as np
 from PIL import Image, ImageDraw, ImageFont, ImageColor
+
+BACKENDS = ("pillow", "pdoom", "html")
+AUDIO_MODES = ("none", "procedural", "file", "mix")
+HIT_KINDS = ("tick", "impact", "chime")
+MAX_HITS = 2000
+# Files that carry third-party rights when they sit inside an HTML composition folder.
+COMPOSITION_MEDIA_SUFFIXES = {
+    ".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif", ".bmp", ".ico",
+    ".ttf", ".otf", ".woff", ".woff2",
+    ".mp3", ".wav", ".ogg", ".m4a", ".aac", ".flac", ".mp4", ".webm", ".mov",
+    ".glb", ".gltf", ".bin", ".hdr", ".exr", ".ktx2", ".lottie",
+}
 
 
 def canonical(value):
@@ -38,10 +51,95 @@ def finite(x):
     return type(x) in (int, float) and math.isfinite(x)
 
 
+def normalized_hits(timing):
+    """Declared sync hits as [{'t': seconds, 'kind': name}], sorted by time."""
+    hits = []
+    for hit in timing.get("hits", []):
+        if isinstance(hit, dict):
+            hits.append({"t": hit.get("t"), "kind": hit.get("kind", "tick")})
+        else:
+            hits.append({"t": hit, "kind": "tick"})
+    return sorted(hits, key=lambda h: h["t"] if finite(h["t"]) else math.inf)
+
+
+def _validate_hits(timing, duration):
+    raw = timing.get("hits", [])
+    if not isinstance(raw, list) or len(raw) > MAX_HITS:
+        raise ValueError(f"timing.hits must be a list of at most {MAX_HITS} entries")
+    for hit in normalized_hits(timing):
+        if not finite(hit["t"]) or not 0 <= hit["t"] < duration:
+            raise ValueError("Every timing hit needs a finite time inside [0, duration)")
+        if hit["kind"] not in HIT_KINDS:
+            raise ValueError(f"Hit kind must be one of {', '.join(HIT_KINDS)}")
+
+
+def _validate_mastering(audio):
+    target = audio.get("loudness_target")
+    if target is not None and (not finite(target) or not -40 <= target <= -5):
+        raise ValueError("audio.loudness_target must be -40..-5 LUFS")
+    ceiling = audio.get("peak_ceiling_dbfs", -1.0)
+    if not finite(ceiling) or not -20 <= ceiling <= 0:
+        raise ValueError("audio.peak_ceiling_dbfs must be -20..0")
+
+
+def _validate_audio(audio, assets, duration):
+    declared = {a["path"] for a in assets}
+    mode = audio["mode"]
+    if mode not in AUDIO_MODES:
+        raise ValueError("Unknown audio mode")
+    if mode == "file" and audio["path"] not in declared:
+        raise ValueError("Audio file must be declared as a licensed asset")
+    if mode == "procedural":
+        if not finite(audio.get("gain")) or not 0 <= audio["gain"] <= .9:
+            raise ValueError("Procedural gain must be 0..0.9")
+        if type(audio.get("bed", True)) is not bool:
+            raise ValueError("audio.bed must be true or false")
+    if mode == "mix":
+        layers = audio.get("layers", [])
+        if not isinstance(layers, list) or not layers and not audio.get("procedural_hits"):
+            raise ValueError("Mix audio needs layers or procedural_hits")
+        for layer in layers:
+            if layer.get("path") not in declared:
+                raise ValueError("Every mix layer must be a declared, licensed asset")
+            if not finite(layer.get("at", 0)) or not -600 <= layer.get("at", 0) < duration:
+                raise ValueError("Mix layer 'at' must be finite and before the end of the video")
+            if layer.get("align", "start") not in ("start", "peak"):
+                raise ValueError("Mix layer align must be 'start' or 'peak'")
+            if not finite(layer.get("gain_db", 0)) or not -60 <= layer.get("gain_db", 0) <= 12:
+                raise ValueError("Mix layer gain_db must be -60..12")
+    if mode in ("procedural", "mix"):
+        _validate_mastering(audio)
+
+
+def composition_media(folder):
+    """Relative paths of rights-bearing files inside an HTML composition folder."""
+    return sorted(p for p in Path(folder).rglob("*")
+                  if p.is_file() and p.suffix.lower() in COMPOSITION_MEDIA_SUFFIXES)
+
+
+def _validate_html(s, root):
+    entry = s.get("html", {}).get("entry")
+    if not isinstance(entry, str) or not entry.endswith(".html"):
+        raise ValueError("html.entry must be a project-relative .html file")
+    path = contained(root, entry)
+    if not path.is_file():
+        raise ValueError(f"Missing html.entry: {entry}")
+    if path.parent == Path(root).resolve():
+        raise ValueError("Place the HTML composition in its own folder; the project root is never served")
+    if any(part.startswith(".") for part in path.relative_to(Path(root).resolve()).parts):
+        raise ValueError("Hidden folders are never served")
+    declared = {a["path"] for a in s.get("assets", [])}
+    for media in composition_media(path.parent):
+        rel = str(media.relative_to(Path(root).resolve()))
+        if rel not in declared:
+            raise ValueError(f"Undeclared media in composition: {rel}; add source and license to assets")
+
+
 def validate(s, root):
     if s.get("version") != 1:
         raise ValueError("Unsupported contract version")
-    if s.get('backend','pillow') not in ('pillow','pdoom'):
+    backend = s.get('backend', 'pillow')
+    if backend not in BACKENDS:
         raise ValueError('Unknown renderer backend')
     if s.get('backend') == 'pdoom' and s.get('render',{}).get('samples',1) != 1:
         raise ValueError('pdoom primitive adapter currently supports one temporal sample only')
@@ -87,7 +185,8 @@ def validate(s, root):
         for t in (a, b):
             if abs(t*v["fps"] - round(t*v["fps"])) > 1e-7:
                 raise ValueError("Scene boundaries must fall on frame boundaries")
-        if not contained(root, scene["module"]).is_file():
+        # HTML compositions render from html.entry; a scene module is optional metadata there.
+        if (backend != "html" or "module" in scene) and not contained(root, scene["module"]).is_file():
             raise ValueError("Missing scene module")
         end = b
     if abs(end-v["duration"]) > 1e-8:
@@ -99,20 +198,15 @@ def validate(s, root):
             raise ValueError("Every asset needs source and license/rights provenance")
         if not contained(root, asset["path"]).is_file():
             raise ValueError(f"Missing asset: {asset['path']}")
-    audio = s.get("audio", {"mode": "none"})
-    if audio["mode"] not in ("none", "procedural", "file"):
-        raise ValueError("Unknown audio mode")
-    if audio["mode"] == "file":
-        if audio["path"] not in [a["path"] for a in s.get("assets", [])]:
-            raise ValueError("Audio file must be declared as a licensed asset")
-    if audio["mode"] == "procedural":
-        if not finite(audio.get("gain")) or not 0 <= audio["gain"] <= .9:
-            raise ValueError("Procedural gain must be 0..0.9")
+    _validate_audio(s.get("audio", {"mode": "none"}), s.get("assets", []), v["duration"])
     timing = s.get("timing", {})
     if "bpm" in timing and (not finite(timing["bpm"]) or timing["bpm"] <= 0):
         raise ValueError("BPM must be positive")
     if not finite(timing.get("beat_offset", 0)):
         raise ValueError("Beat offset must be finite")
+    _validate_hits(timing, v["duration"])
+    if backend == "html":
+        _validate_html(s, root)
     interval = s.get("qa", {}).get("sample_every", 1.)
     if not finite(interval) or interval < 1/v["fps"]:
         raise ValueError("QA sample interval must be finite and at least one frame")
@@ -151,7 +245,7 @@ def source_manifest(root, spec):
             dirs[:]=sorted(d for d in dirs if d not in excluded)
             for name in sorted(names):
                 p=Path(current)/name
-                if p.suffix in ('.py','.ts','.json','.html'):implementation[str(p.relative_to(base))]=digest(p)
+                if p.suffix in ('.py','.ts','.js','.json','.html'):implementation[str(p.relative_to(base))]=digest(p)
     return {"contract": hashlib.sha256(canonical(spec).encode()).hexdigest(), "files": files, 'implementation':implementation}
 
 
@@ -165,6 +259,32 @@ def luminance(color):
 def contrast(a, b):
     x, y = sorted((luminance(a), luminance(b)))
     return (y+.05)/(x+.05)
+
+
+def contrast_rgb(a, b):
+    """WCAG contrast of two 0..255 RGB triples (floats allowed for blended colors)."""
+    def lum(rgb):
+        c = [v/255 for v in rgb]
+        c = [v/12.92 if v <= .04045 else ((v+.055)/1.055)**2.4 for v in c]
+        return .2126*c[0]+.7152*c[1]+.0722*c[2]
+    x, y = sorted((lum(a), lum(b)))
+    return (y+.05)/(x+.05)
+
+
+def temporal_average(render_at, t, scene, settings, fps):
+    """Average fixed sub-frame samples in linear light, clipped to the scene window."""
+    count = settings.get("samples", 1)
+    width = settings.get("shutter", .3)/fps
+    frames = []
+    for i in range(count):
+        st = t + ((i+.5)/count-.5)*width
+        st = min(scene["end"]-1e-9, max(scene["start"], st))
+        srgb = np.asarray(render_at(st)).astype(np.float32)/255
+        # Average in linear light, not sRGB (which darkens blur).
+        frames.append(np.where(srgb <= .04045, srgb/12.92, ((srgb+.055)/1.055)**2.4))
+    linear = np.mean(frames, axis=0)
+    srgb = np.where(linear <= .0031308, linear*12.92, 1.055*linear**(1/2.4)-.055)
+    return Image.fromarray(np.clip(np.rint(srgb*255), 0, 255).astype('uint8'))
 
 
 def ease(p):
@@ -236,21 +356,9 @@ class SceneRenderer:
         return result
 
     def sampled(self, t):
-        import numpy as np
         settings, fps = self.spec.get("render", {}), self.spec["video"]["fps"]
-        count = settings.get("samples", 1)
-        if count == 1:
+        if settings.get("samples", 1) == 1:
             return self.render(t)
         scene = next(x for x in self.spec["scenes"] if x["start"] <= t < x["end"])
-        width = settings.get("shutter", .3)/fps
-        frames = []
-        for i in range(count):
-            st = t + ((i+.5)/count-.5)*width
-            st = min(scene["end"]-1e-9, max(scene["start"], st))
-            srgb = np.asarray(self.render(st).image).astype(np.float32)/255
-            # Average in linear light, not sRGB (which darkens blur).
-            frames.append(np.where(srgb <= .04045, srgb/12.92, ((srgb+.055)/1.055)**2.4))
-        linear = np.mean(frames, axis=0)
-        srgb = np.where(linear <= .0031308, linear*12.92, 1.055*linear**(1/2.4)-.055)
-        image = Image.fromarray(np.clip(np.rint(srgb*255), 0, 255).astype('uint8'))
+        image = temporal_average(lambda st: self.render(st).image, t, scene, settings, fps)
         return Frame(image, self.render(t).elements)

@@ -3,13 +3,19 @@
 The user's one prompt starts an internal multi-step job. It does not mean one LLM
 completion or that evaluation, editing and rendering disappear.
 
-Return JSON with `contract`, optional `files` (scenes/*.py only), and optional
-`author` (self-reported). Use all frozen requirements unchanged. Decide the script,
+Return JSON with `contract`, optional `files` (scenes/*.py, or text files under
+compositions/<name>/ for the html backend), and optional `author` (self-reported). Use all frozen requirements unchanged. Decide the script,
 scene plan and appropriate original visual language from the user's prompt. Do
 not reproduce a reference's branding, soundtrack or visual signature by default.
 
-Two tested render backends:
+Three tested render backends:
 
+- `html`: an agent-written composition under `compositions/<name>/` exposing a pure
+  `window.__vch.seek(t)` (or `window.seek`, paused `window.__timelines`, CSS/Web Animations).
+  Set `html.entry`; scene `module` is optional. Author files may be any text under
+  `compositions/<name>/` (.html .js .css .json .svg .glsl); media must be declared assets with
+  rights. Rules and the seek protocol are in AUTHORING.md ("HTML compositions"). Visible DOM/SVG
+  text is measured automatically; mark semantic lines with `data-vch-id`.
 - `pillow`: Python `render(ctx) -> Frame`, arbitrary reviewed scene code.
 - `pdoom`: an original browser timeline that executes pinned pdoom FSPass shader
   primitives. No full upstream Engine/adaptive post stack. Set render.samples=1.

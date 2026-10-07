@@ -6,6 +6,7 @@ from .core import load_contract, SceneRenderer, source_manifest
 from .pipeline import render, audit
 from .evaluate import evaluate, review_template, METRIC_TYPES
 from .backends import create_renderer
+from .tools import still_times, render_stills, storyboard_markdown, profile_media, summary_line
 
 
 def main():
@@ -16,6 +17,12 @@ def main():
     p=sub.add_parser('metrics')
     p=sub.add_parser('run'); p.add_argument('contract'); p.add_argument('--out',required=True);p.add_argument('--trust-scene-code',action='store_true')
     p=sub.add_parser('still');p.add_argument('contract');p.add_argument('--time',type=float,required=True);p.add_argument('--out',required=True);p.add_argument('--trust-scene-code',action='store_true')
+    p=sub.add_parser('stills',help='Render preview stills + sheet before a full render')
+    p.add_argument('contract');p.add_argument('--out',required=True);p.add_argument('--times',help='Comma-separated seconds')
+    p.add_argument('--beats',action='store_true',help='One still per beat of timing.bpm');p.add_argument('--trust-scene-code',action='store_true')
+    p=sub.add_parser('storyboard',help='Print a timestamped storyboard table from a contract');p.add_argument('contract')
+    p=sub.add_parser('profile',help='Measure pacing/sound of a video or audio file (reference or candidate)')
+    p.add_argument('media');p.add_argument('--out',required=True);p.add_argument('--every',type=float,default=1.0);p.add_argument('--max-fps',type=float,default=30.0)
     p=sub.add_parser('evaluate');p.add_argument('run');p.add_argument('--review');p.add_argument('--project-root')
     p=sub.add_parser('audit');p.add_argument('run');p.add_argument('--project-root')
     p=sub.add_parser('review-template');p.add_argument('run');p.add_argument('--out',required=True)
@@ -39,7 +46,9 @@ def main():
             raise SystemExit(0 if result['state']=='accepted_by_contract' else 3 if result['state']=='needs_review' else 2)
         if args.cmd=='metrics':
             print(json.dumps(METRIC_TYPES,indent=2));return
-        if args.cmd in ('validate','packet','run','still'):
+        if args.cmd=='profile':
+            print(json.dumps(summary_line(profile_media(Path(args.media),Path(args.out),every=args.every,max_fps=args.max_fps)),ensure_ascii=False,indent=2));return
+        if args.cmd in ('validate','packet','run','still','stills','storyboard'):
             spec,root=load_contract(args.contract)
         if args.cmd=='validate':
             print('Contract structurally valid; unknown metrics remain unmeasured at evaluation.');return
@@ -47,16 +56,22 @@ def main():
             packet={'task':'Author or repair code-rendered video. Do not copy the reference style.',
                     'contract':spec,'project_root':str(root),'source':source_manifest(root,spec),
                     'read_first':['AGENTS.md','docs/AUTHORING.md','docs/MEASUREMENT.md'],
-                    'write_scope':['scenes/','assets/ (rights documented)'],
+                    'write_scope':['scenes/','compositions/ (html backend)','assets/ (rights documented)'],
                     'protected':['examples/*.json requirements/thresholds unless owner approves changes','vch/evaluate.py','tests/'],
                     'loop':['Read requirements and sources','Map every requirement to evidence; flag undefined criteria',
                             'Propose storyboard and timing','Implement pure render(t,seed)',
-                            'Render boundary/midpoint stills and LOOK at them','Run full render/evaluator',
+                            'Render stills (vch stills, or --beats) and LOOK at them','Run full render/evaluator',
                             'Read report.json and decoded contact sheet','Repair exact failed requirements; max 3 attempts',
                             'Leave human review pending; record model ID only if runtime reports it'],
                     'output':['changed files','commands actually executed','requirement IDs addressed','remaining failures/unmeasured','real artifact paths'],
                     'stop':['No silent acceptance-threshold changes','No paid API calls without permission','No public upload','No claim of universal quality from proxy scores']}
             print(json.dumps(packet,ensure_ascii=False,indent=2));return
+        if args.cmd=='storyboard':
+            print(storyboard_markdown(spec),end='');return
+        if args.cmd=='stills':
+            times=[float(x) for x in args.times.split(',')] if args.times else None
+            summary=render_stills(spec,root,Path(args.out),times=still_times(spec,times=times,beats=args.beats),trust_code=args.trust_scene_code)
+            print(json.dumps({'out':args.out,'stills':len(summary['stills']),'warnings':summary['warnings']},ensure_ascii=False,indent=2));return
         if args.cmd=='still':
             path=Path(args.out)
             if path.exists(): raise FileExistsError('Refuse to overwrite an existing still')

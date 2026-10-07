@@ -1,5 +1,9 @@
 # What the recording teaches — and what this harness adds
 
+> 2026-10-06: a second study covers 475 public "Opus 5.5" code-rendered videos (HyperFrames,
+> Remotion, single-file HTML with `seek(t)`), measures 38 of them and maps their production
+> practices onto new harness features: [OPUS_VIDEO_RESEARCH.md](OPUS_VIDEO_RESEARCH.md).
+
 Analysis date: 2026-10-03 UTC. User file:
 `ScreenRecording_10-02-2026 21-31-33_1.mp4`.
 

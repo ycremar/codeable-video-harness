@@ -6,11 +6,12 @@ import math
 import platform
 import subprocess
 import sys
-import wave
 from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
 from .core import SceneRenderer, canonical, digest, source_manifest, contained
+from .audio import render_audio
+from . import signals
 
 
 def command(args, **kwargs):
@@ -22,36 +23,8 @@ def probe(path):
 
 
 def make_audio(spec, root, out):
-    config = spec.get('audio', {'mode': 'none'})
-    if config['mode'] == 'none':
-        return None
-    if config['mode'] == 'file':
-        path = contained(root, config['path'])
-        if float(probe(path)['format']['duration']) + 1e-3 < spec['video']['duration']:
-            raise ValueError('Provided audio is shorter than the video; no silent auto-padding')
-        return path
-    # Original deterministic percussive bed; no copyrighted song or voice clone.
-    sr, seconds = 48000, spec['video']['duration']
-    signal = np.zeros(round(sr*seconds), dtype=np.float64)
-    bpm = spec.get('timing', {}).get('bpm', 120)
-    offset = spec.get('timing', {}).get('beat_offset', 0)
-    beats = np.arange(offset, seconds, 60/bpm)
-    for i, start in enumerate(beats):
-        if start < 0:
-            continue
-        t = np.arange(int(sr*.22))/sr
-        hit = np.sin(2*np.pi*(70*t + 14*(1-np.exp(-32*t))))*np.exp(-28*t)
-        if i % 2:
-            hit += .25*np.sin(2*np.pi*720*t)*np.exp(-60*t)
-        a = round(start*sr); b = min(a+len(hit), len(signal))
-        signal[a:b] += hit[:b-a]
-    peak = max(1, float(np.max(np.abs(signal))))
-    signal = signal/peak*config['gain']
-    path = out/'audio.wav'
-    with wave.open(str(path), 'wb') as f:
-        f.setnchannels(1); f.setsampwidth(2); f.setframerate(sr)
-        f.writeframes(np.rint(signal*32767).astype('<i2').tobytes())
-    return path
+    """Audio path for a run (None when silent); see vch.audio for placement and mastering."""
+    return render_audio(spec, root, out)[0]
 
 
 def sample_times(spec):
@@ -66,6 +39,30 @@ def sample_times(spec):
     for t in np.arange(0, duration, spec.get('qa', {}).get('sample_every', 1.)):
         times.add(round(t*fps)/fps)
     return sorted(t for t in times if t < duration)
+
+
+def contact_sheet(items, path, width, height, cols=4, thumb_width=240):
+    """Labelled grid of image files (decoded frames), saved as JPEG."""
+    th = round(thumb_width*height/width); ch = th+26
+    sheet = Image.new('RGB',(cols*thumb_width, math.ceil(len(items)/cols)*ch),'#dddddd')
+    draw = ImageDraw.Draw(sheet)
+    for i, (file, label) in enumerate(items):
+        im = Image.open(file); im.thumbnail((thumb_width,th))
+        x,y = (i%cols)*thumb_width,(i//cols)*ch
+        sheet.paste(im,(x,y)); draw.text((x+5,y+th+3),label,fill='black')
+    sheet.save(path,quality=90)
+
+
+def decoded_evidence(video, spec, probe_result):
+    """Whole-file decoded measurements bound into evidence.json (motion, timing, loudness, onsets)."""
+    v = spec['video']
+    motion = signals.decoded_motion(video, width=v['width'], height=v['height'])
+    for key in ('hist_jump', 'luma'):
+        motion.pop(key)
+    result = {'decoded_motion': motion, 'frame_timing': signals.frame_timing(video, fps=v['fps'])}
+    if any(x['codec_type'] == 'audio' for x in probe_result['streams']):
+        result['audio_analysis'] = signals.audio_analysis(video)
+    return result
 
 
 def decode_frame(path, t, target):
@@ -91,7 +88,7 @@ def _render(spec, root, out, renderer):
     before = source_manifest(root, spec)
     out.mkdir(parents=True)
     (out/'contract.json').write_text(json.dumps(spec, ensure_ascii=False, indent=2))
-    audio = make_audio(spec, root, out)
+    audio, audio_render = render_audio(spec, root, out)
     v = spec['video']; fps = v['fps']; n = round(v['duration']*fps)
     args = ['ffmpeg','-y','-v','error','-f','rawvideo','-pix_fmt','rgb24','-s',f"{v['width']}x{v['height']}",'-r',str(fps),'-i','-']
     if audio:
@@ -153,18 +150,14 @@ def _render(spec, root, out, renderer):
                         'raw_sha256': reference[t],
                         'decode_mae': float(np.mean(np.abs(pixels.astype(float)-expected))),
                         'black_fraction': float(np.mean(np.max(pixels,axis=2)<12))})
-    cols = 4; tw = 240; th = round(tw*v['height']/v['width']); ch = th+26
-    sheet = Image.new('RGB',(cols*tw, math.ceil(len(samples)/cols)*ch),'#dddddd')
-    draw = ImageDraw.Draw(sheet)
-    for i, sample in enumerate(samples):
-        im = Image.open(out/sample['file']); im.thumbnail((tw,th))
-        x,y = (i%cols)*tw,(i//cols)*ch
-        sheet.paste(im,(x,y)); draw.text((x+5,y+th+3),f"t={sample['t']:.3f}s",fill='black')
-    sheet.save(out/'contact-sheet.jpg',quality=90)
+    contact_sheet([(out/x['file'], f"t={x['t']:.3f}s") for x in samples], out/'contact-sheet.jpg', v['width'], v['height'])
     evidence = {'samples': samples, 'determinism_mismatches': differences, 'sampling': 'boundaries + midpoint + periodic; not exhaustive perception',
                 'probe': probe(out/'video.mp4')}
     if spec.get('narration_metadata'):
         evidence['narration'] = json.loads(contained(root,spec['narration_metadata']).read_text())
+    evidence.update(decoded_evidence(out/'video.mp4', spec, evidence['probe']))
+    if audio_render:
+        evidence['audio_render'] = audio_render
     (out/'evidence.json').write_text(json.dumps(evidence,indent=2))
     manifest = {'source': before, 'video_sha256': digest(out/'video.mp4'),
                 'trace_sha256': digest(out/'trace.jsonl'), 'evidence_sha256': digest(out/'evidence.json'),
