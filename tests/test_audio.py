@@ -9,7 +9,8 @@ from pathlib import Path
 import numpy as np
 
 from vch import signals
-from vch.audio import SAMPLE_RATE, beat_bed, master, mix_track, procedural_track
+from vch.audio import (DUCK_DEPTH, SAMPLE_RATE, WHOOSH_SWELL_S, beat_bed, duck_envelope, hit_sound, master, mix_track,
+                       pad_bed, procedural_track)
 from vch.core import validate
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -70,6 +71,39 @@ class ProceduralAudioTests(unittest.TestCase):
         self.assertGreater(np.max(np.abs(bed)), 0.5)
 
 
+class BedAndCueTests(unittest.TestCase):
+    def test_whoosh_peak_is_its_landing(self):
+        whoosh = hit_sound('whoosh')
+        self.assertAlmostEqual(np.argmax(np.abs(whoosh)) / SAMPLE_RATE, WHOOSH_SWELL_S, delta=0.005)
+
+    def test_whoosh_is_detected_where_it_is_placed(self):
+        spec = {'video': {'duration': 3}, 'timing': {'hits': [{'t': 1.5, 'kind': 'whoosh'}]},
+                'audio': {'mode': 'procedural', 'gain': 0.8, 'bed': False}}
+        track, _ = procedural_track(spec)
+        found = [e['t'] for e in signals.detect_onsets(track[::2], rate=SAMPLE_RATE // 2)]
+        self.assertTrue(any(abs(t - 1.5) < 0.005 for t in found), found)
+
+    def test_pad_is_deterministic_bounded_and_click_free(self):
+        a, b = pad_bed(duration=10, bpm=120, offset=0), pad_bed(duration=10, bpm=120, offset=0)
+        self.assertTrue(np.array_equal(a, b))
+        self.assertAlmostEqual(float(np.max(np.abs(a))), 1.0)
+        # Chord changes at 4 s and 8 s crossfade: no sample-to-sample jump beyond the oscillators' own slope.
+        self.assertLess(float(np.max(np.abs(np.diff(a)))), 0.1)
+
+    def test_ducking_keeps_each_cue_loudest_under_a_loud_bed(self):
+        hits = [{'t': t, 'kind': 'chime'} for t in (1.0, 2.0, 3.0)]
+        spec = {'video': {'duration': 4}, 'timing': {'bpm': 120, 'hits': hits},
+                'audio': {'mode': 'procedural', 'gain': 0.8, 'bed': False, 'pad': 1.4}}
+        track, info = procedural_track(spec)
+        self.assertEqual(info['pad'], 1.4)
+        found = [e['t'] for e in signals.detect_onsets(track[::2], rate=SAMPLE_RATE // 2)]
+        for hit in hits:
+            self.assertLess(min(abs(t - hit['t']) for t in found), 0.02)
+        envelope = duck_envelope(SAMPLE_RATE * 4, [2.0])
+        self.assertAlmostEqual(float(envelope[2 * SAMPLE_RATE]), 1 - DUCK_DEPTH, places=6)
+        self.assertEqual(float(envelope[0]), 1.0)
+
+
 class ValidationTests(unittest.TestCase):
     def setUp(self):
         self.spec = json.loads((ROOT/'examples/explainer.json').read_text())
@@ -88,6 +122,12 @@ class ValidationTests(unittest.TestCase):
         self.spec['audio'] = {'mode': 'mix', 'layers': [{'path': 'assets/sfx/undeclared.wav', 'at': 1}]}
         with self.assertRaises(ValueError):
             validate(self.spec, ROOT)
+
+    def test_pad_level_must_be_a_number_in_range(self):
+        for level in (2.5, -0.1, True, 'loud'):
+            self.spec['audio']['pad'] = level
+            with self.assertRaises(ValueError):
+                validate(self.spec, ROOT)
 
     def test_loudness_target_range(self):
         self.spec['audio']['loudness_target'] = 3

@@ -27,6 +27,20 @@ PROFILE_SHEET_COLS = 6
 TIMELINE_SIZE = (1600, 260)
 VISUAL_SYNC_WINDOW_S = 0.1
 CUT_SYNC_WINDOW_S = 0.05
+COMPARE_ROWS = (
+    ("duration (s)", ("video", "duration_s")),
+    ("hard cuts per 10 s", ("video", "cuts_per_10s")),
+    ("visual events per 10 s", ("video", "visual_events_per_10s")),
+    ("median gap between visual events (s)", ("video", "visual_gap_s", "median")),
+    ("longest still hold (s)", ("video", "longest_still_hold_s")),
+    ("edge density, median", ("video", "density", "edge_density", "median")),
+    ("edge density, p10", ("video", "density", "edge_density", "p10")),
+    ("grid cells in use, median", ("video", "density", "used_cells", "median")),
+    ("colourfulness, median", ("video", "density", "colourfulness", "median")),
+    ("integrated loudness (LUFS)", ("audio", "integrated_lufs")),
+    ("true peak (dBTP)", ("audio", "true_peak_dbtp")),
+    ("audio onsets per s", ("audio", "onsets_per_s")),
+)
 
 
 def still_times(spec: dict[str, Any], *, times: list[float] | None = None, beats: bool = False) -> list[float]:
@@ -52,8 +66,20 @@ def _scene_at(spec: dict[str, Any], t: float) -> str:
     return next(s["id"] for s in spec["scenes"] if s["start"] <= t < s["end"])
 
 
-def render_stills(spec: dict[str, Any], root: Path, out: Path, *, times: list[float], trust_code: bool) -> dict[str, Any]:
-    """Render raw (pre-encode) frames, a labelled sheet and per-still text checks."""
+def frame_change(first: Image.Image, second: Image.Image) -> float:
+    """Mean |luma change| between two frames at the analysis size `max_static_hold_s` uses (0..255)."""
+    size = signals.analysis_size(*first.size)
+    a, b = (signals._luma(np.asarray(im.convert("RGB").resize(size, Image.Resampling.BOX))) for im in (first, second))
+    return round(float(np.mean(np.abs(b - a))), 3)
+
+
+def render_stills(spec: dict[str, Any], root: Path, out: Path, *, times: list[float], trust_code: bool,
+                  motion: bool = False) -> dict[str, Any]:
+    """Render raw (pre-encode) frames, a labelled sheet and per-still text checks.
+
+    motion=True also renders each still's next frame and reports their change at the dead-time
+    analysis size, so a hold can be checked before a full render (raw frames, so decoded values differ slightly).
+    """
     out = Path(out)
     if out.exists():
         raise FileExistsError("Refuse to overwrite an existing stills folder")
@@ -72,6 +98,9 @@ def render_stills(spec: dict[str, Any], root: Path, out: Path, *, times: list[fl
                 "overlaps": [list(p) for p in signals.overlap_pairs(frame.elements)],
                 "smallest_text_px": min((e["size"] for e in text), default=None),
             })
+            following = t + 1 / spec["video"]["fps"]
+            if motion and following < spec["video"]["duration"]:
+                stills[-1]["frame_change"] = frame_change(frame.image, renderer.sampled(following).image)
     finally:
         if hasattr(renderer, "close"):
             renderer.close()
@@ -82,7 +111,9 @@ def render_stills(spec: dict[str, Any], root: Path, out: Path, *, times: list[fl
                "note": "raw renderer frames before encoding; look at them, then run the full render for decoded evidence",
                "warnings": [f"t={s['t']:.3f}s overlapping text {s['overlaps']}" for s in stills if s["overlaps"]]
                + [f"t={s['t']:.3f}s text below {SMALL_TEXT_PX}px" for s in stills
-                  if s["smallest_text_px"] is not None and s["smallest_text_px"] < SMALL_TEXT_PX]}
+                  if s["smallest_text_px"] is not None and s["smallest_text_px"] < SMALL_TEXT_PX]
+               + [f"t={s['t']:.3f}s next-frame change {s['frame_change']} < {signals.DEFAULT_STILL_DELTA} (still for max_static_hold_s)"
+                  for s in stills if s.get("frame_change") is not None and s["frame_change"] < signals.DEFAULT_STILL_DELTA]}
     (out / "stills.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2))
     return summary
 
@@ -187,6 +218,7 @@ def _video_profile(path: Path, stream: dict[str, Any], out: Path, *, every: floa
         if motion["frames"] > 1 else None,
         "single_frame_pops": pops, "light_dark_switches": signals.light_dark_switches(motion["luma"], fps=fps),
         "mean_luma": round(float(np.mean(motion["luma"])), 3), "loop_seam_ratio": signals.loop_seam_ratio(motion, fps=fps),
+        "density": signals.decoded_density(path, width=stream["width"], height=stream["height"]),
         "_motion": motion, "_events": events, "_cuts": cuts,
     }
 
@@ -241,6 +273,30 @@ def summary_line(profile: dict[str, Any]) -> dict[str, Any]:
         "duration_s": v.get("duration_s") or a.get("duration_s"), "cuts_per_10s": v.get("cuts_per_10s"),
         "median_shot_s": v.get("shot_s", {}).get("median"), "visual_events_per_10s": v.get("visual_events_per_10s"),
         "longest_still_hold_s": v.get("longest_still_hold_s"), "single_frame_pops": len(v.get("single_frame_pops", [])) if v else None,
+        "edge_density": v.get("density", {}).get("edge_density", {}).get("median"),
+        "used_cells": v.get("density", {}).get("used_cells", {}).get("median"),
         "integrated_lufs": a.get("integrated_lufs"), "true_peak_dbtp": a.get("true_peak_dbtp"),
         "tempo": a.get("tempo"), "onsets": len(a.get("onsets", [])) if a else None,
     }.items() if x is not None and not (isinstance(x, float) and math.isnan(x))}
+
+
+def _lookup(profile: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    value: Any = profile
+    for key in keys:
+        value = value.get(key) if isinstance(value, dict) else None
+    return value
+
+
+def compare_profiles(first: dict[str, Any], second: dict[str, Any]) -> str:
+    """Markdown table of the same proxies for two profiles (e.g. a licensed reference and a candidate)."""
+    lines = [f"| proxy | {first.get('input', 'first')} | {second.get('input', 'second')} | second / first |",
+             "|---|---|---|---|"]
+    for label, keys in COMPARE_ROWS:
+        a, b = _lookup(first, keys), _lookup(second, keys)
+        ratio = f"{b / a:.2f}" if finite(a) and finite(b) and a and label not in (
+            "integrated loudness (LUFS)", "true peak (dBTP)") else ""
+        lines.append(f"| {label} | {'' if a is None else a} | {'' if b is None else b} | {ratio} |")
+    lines.append("")
+    lines.append("Decoded-pixel and sample proxies only. Detail is not information, and pace is not quality; "
+                 "a deliberately minimal film scores low on purpose. Use differences to ask questions, not to grade.")
+    return "\n".join(lines) + "\n"

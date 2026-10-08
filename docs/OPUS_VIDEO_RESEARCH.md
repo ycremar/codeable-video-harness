@@ -217,6 +217,9 @@ cue-level audio placement, and much more explicit verification habits.
 | Hit sync | `audio_hit_sync_ms` (declared hits vs detected transient peaks) | proxy |
 | Analyse a song or reference | `vch profile` (pacing, cuts, holds, pops, loudness, onsets, tempo and phase) | measurement of an input |
 | Skills as the knowledge layer | `.claude/skills/codeable-video/SKILL.md` | — |
+| "Make it as rich as this reference" | `vch profile` detail proxies + `vch profile-compare` | measurement of inputs |
+| Whooshes on transitions; a music bed under cues | `whoosh` cue kind (tonal riser, peak at landing); `audio.pad` chord bed ducked under cues | — |
+| "Every hold must keep moving" | `vch stills --motion` (next-frame change at the dead-time analysis size) | preview only |
 
 Two determinism defects surfaced while building the example (`examples/html.json`). Both were
 caught by the existing forward/reverse/shuffled seek check:
@@ -241,6 +244,60 @@ Not implemented:
   exists, and remains a self-attestation.
 
 Human craft review stays human.
+
+## Addendum 2026-10-08: the awesome list, finishing, and matching a reference
+
+**Second source.** [yihui-dev/awesome-opus5-5-videos](https://github.com/yihui-dev/awesome-opus5-5-videos)
+publishes the same collection as data: 513 entries (38 added 2026-10-08), each with its prompt or
+post. Keyword counts across all 513 (**Stated**, lower bounds; 144 prompts exceed 300 characters):
+
+| Mentioned | Entries |
+|---|---|
+| Remotion | 89 (17%) |
+| HyperFrames | 38 |
+| Three.js | 30 |
+| A single HTML file / `seek(t)` / Playwright | 28 |
+| Generated images or video (Seedance, Midjourney, GPT Image, fal, …) | 12 |
+| Glow / bloom | 21 |
+| Motion blur / sub-frames | 18 |
+| Lighting | 12 |
+| Shadows | 11 |
+| Texture, halftone, CRT | 10 |
+| Film grain | 5 |
+| Magnific | 2, both incidental (one is on-screen copy) |
+
+A commenter's advice: "Most of what you're seeing is Claude writing code, not making video
+directly. Ask it for a Remotion or three.js scene, render it out, and a lot of people run the
+stills through Magnific after so they look less flat." The first part matches everything above.
+The Magnific step is **Stated by a third party**. No published prompt describes it, so if it
+happens, it happens outside the prompt and cannot be measured from this data. It is a generative,
+paid enhancement. This harness does not call it: such a step would need rights, provenance and a
+human review of what the model changed. What prompts do ask for in code is the finishing
+vocabulary in the table: glow, lighting, shadows, grain and texture.
+
+**Matching the requested video's density.** `vch profile` now reports detail proxies, and
+`vch profile-compare` puts two profiles side by side. Measured on decoded files (**Observed**):
+
+| Proxy | Requested video | Previous 12 s example | `how-code-becomes-video` |
+|---|---|---|---|
+| Edge density, median | 0.088 | 0.051 | 0.104 |
+| Frame grid in use, median | 59% | 40% | 61% |
+| Hard cuts per 10 s | 0 | 1.7 | 0 |
+| Longest still hold | 1.07 s | 1.3 s | 1.17 s |
+| Frames still by the dead-time proxy | 17% | 64% | 58% |
+
+The new film reaches the reference's detail and continuity. It is still less continuously in
+motion: the reference's Three.js camera never stops, while this film's camera parks at each
+station and pushes in on cues. Detail is not information. Which film explains better is the
+human review's question.
+
+**A third determinism defect** was caught while building it. Chromium's GPU-rasterised 2D canvas
+drew a page's first instance of a path differently from later draws: 3 pixels, ±7 levels. A frame
+rendered first in a fresh page therefore differed from the same frame rendered later. 2D canvas is
+now rasterised on the CPU, which removed the difference and was also faster. Capture switched to
+CDP's lossless fast-PNG mode: pixel-identical, about 2.5x faster than Playwright's screenshot.
+Together they cut steady-state capture from about 350 ms to about 90 ms per 1080p frame. The
+48-second film now renders and is fully evaluated in about 6 minutes.
 
 ## Appendix: measured sample
 

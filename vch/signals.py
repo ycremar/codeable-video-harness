@@ -40,6 +40,11 @@ DEFAULT_POP_FLOOR = 8.0
 SEAM_WINDOW_S = 0.5
 DARK_LUMA, LIGHT_LUMA = 0.3, 0.6
 SUBPROCESS_TIMEOUT_S = 600
+DENSITY_MAX_SIDE = 480
+DENSITY_EVERY_S = 0.5
+EDGE_STEP = 24.0
+CELL_GRID = (12, 6)
+CELL_EDGE_FRACTION = 0.02
 
 
 def analysis_size(width: int, height: int) -> tuple[int, int]:
@@ -58,8 +63,8 @@ def probe_video(path: Path) -> dict[str, Any]:
     return streams[0]
 
 
-def _decoded_frames(path: Path, *, width: int, height: int, max_fps: float | None) -> Iterator[np.ndarray]:
-    w, h = analysis_size(width, height)
+def _decoded_frames(path: Path, *, size: tuple[int, int], max_fps: float | None) -> Iterator[np.ndarray]:
+    w, h = size
     vf = f"scale={w}:{h}:flags=area,format=rgb24"
     if max_fps:
         vf = f"fps={max_fps}," + vf
@@ -102,7 +107,7 @@ def decoded_motion(path: Path, *, width: int, height: int, max_fps: float | None
     """
     diffs, bridges, jumps, lumas, thumbs = [], [], [], [], {}
     prev = prev2 = prev_hist = first = last = None
-    for rgb in _decoded_frames(path, width=width, height=height, max_fps=max_fps):
+    for rgb in _decoded_frames(path, size=analysis_size(width, height), max_fps=max_fps):
         y = _luma(rgb)
         hist = _histogram(rgb)
         diffs.append(0.0 if prev is None else float(np.mean(np.abs(y - prev))))
@@ -125,6 +130,48 @@ def decoded_motion(path: Path, *, width: int, height: int, max_fps: float | None
     }
     if thumbnail_stride:
         result["thumbnails"] = thumbs
+    return result
+
+
+def frame_density(rgb: np.ndarray) -> dict[str, float]:
+    """Visual-detail proxies for one frame; none of them measures information or quality.
+
+    edge_density = share of pixels whose Sobel luma step exceeds EDGE_STEP (0..255 scale)
+    used_cells   = share of a 12x6 grid whose cells contain at least 2% such edge pixels
+    colourfulness = Hasler & Suesstrunk (2003) opponent-colour statistic
+    """
+    y = _luma(rgb)
+    gx = np.zeros_like(y)
+    gy = np.zeros_like(y)
+    gx[1:-1, 1:-1] = (y[:-2, 2:] + 2 * y[1:-1, 2:] + y[2:, 2:]) - (y[:-2, :-2] + 2 * y[1:-1, :-2] + y[2:, :-2])
+    gy[1:-1, 1:-1] = (y[2:, :-2] + 2 * y[2:, 1:-1] + y[2:, 2:]) - (y[:-2, :-2] + 2 * y[:-2, 1:-1] + y[:-2, 2:])
+    # A Sobel response is 4x the luma step across an ideal edge.
+    edges = np.hypot(gx, gy) / 4 > EDGE_STEP
+    cols, rows = CELL_GRID
+    h, w = edges.shape
+    cells = edges[:h - h % rows, :w - w % cols].reshape(rows, h // rows, cols, w // cols).mean(axis=(1, 3))
+    f = rgb.astype(np.float64)
+    rg = f[..., 0] - f[..., 1]
+    yb = 0.5 * (f[..., 0] + f[..., 1]) - f[..., 2]
+    colourfulness = math.hypot(rg.std(), yb.std()) + 0.3 * math.hypot(rg.mean(), yb.mean())
+    return {"edge_density": float(edges.mean()), "used_cells": float((cells >= CELL_EDGE_FRACTION).mean()),
+            "colourfulness": float(colourfulness)}
+
+
+def decoded_density(path: Path, *, width: int, height: int, every: float = DENSITY_EVERY_S) -> dict[str, Any]:
+    """frame_density of decoded frames sampled every `every` seconds at up to DENSITY_MAX_SIDE px."""
+    scale = DENSITY_MAX_SIDE / max(width, height)
+    size = (max(CELL_GRID[0], 2 * round(width * scale / 2)), max(CELL_GRID[1], 2 * round(height * scale / 2)))
+    frames = [frame_density(rgb) for rgb in _decoded_frames(path, size=size, max_fps=1 / every)]
+    if not frames:
+        raise ValueError(f"No decodable frames in {path}")
+    result: dict[str, Any] = {"every_s": every, "analysis_size": list(size), "frames": len(frames)}
+    for key in ("edge_density", "used_cells", "colourfulness"):
+        values = np.array([f[key] for f in frames])
+        result[key] = {"median": round(float(np.median(values)), 4), "p10": round(float(np.percentile(values, 10)), 4),
+                       "p90": round(float(np.percentile(values, 90)), 4)}
+    result["units"] = ("edge_density/used_cells are fractions 0..1; colourfulness is Hasler-Suesstrunk on 0..255 RGB; "
+                       "detail proxies, not information or quality")
     return result
 
 

@@ -1,0 +1,222 @@
+{
+ "source": "skillry.dev Opus 5.5 collection, read 2026-10-06; 38 originals measured with `vch profile` (see docs/OPUS_VIDEO_RESEARCH.md). Values only; no media.",
+ "entries": 475,
+ "categories": [
+  [
+   "motion",
+   288
+  ],
+  [
+   "interactive",
+   70
+  ],
+  [
+   "explainer",
+   62
+  ],
+  [
+   "3D",
+   55
+  ]
+ ],
+ "summary": {
+  "measured_files": 38,
+  "audible_files": 28,
+  "median_gap_s": 1.82,
+  "median_lufs": -14.15,
+  "peak_above_minus1": 14,
+  "peak_above_0": 4
+ },
+ "files": [
+  {
+   "gap_s": 0.77,
+   "lufs": -14.0,
+   "peak_dbtp": -0.3
+  },
+  {
+   "gap_s": 4.83,
+   "lufs": null,
+   "peak_dbtp": null
+  },
+  {
+   "gap_s": 3.53,
+   "lufs": null,
+   "peak_dbtp": null
+  },
+  {
+   "gap_s": 0.85,
+   "lufs": -12.3,
+   "peak_dbtp": -0.5
+  },
+  {
+   "gap_s": 2.87,
+   "lufs": -12.9,
+   "peak_dbtp": -1.0
+  },
+  {
+   "gap_s": 1.0,
+   "lufs": -24.0,
+   "peak_dbtp": -1.5
+  },
+  {
+   "gap_s": 2.57,
+   "lufs": null,
+   "peak_dbtp": null
+  },
+  {
+   "gap_s": 1.77,
+   "lufs": null,
+   "peak_dbtp": null
+  },
+  {
+   "gap_s": 5.63,
+   "lufs": -9.4,
+   "peak_dbtp": 3.7
+  },
+  {
+   "gap_s": 0.58,
+   "lufs": -14.1,
+   "peak_dbtp": -3.9
+  },
+  {
+   "gap_s": 0.47,
+   "lufs": -10.3,
+   "peak_dbtp": 2.0
+  },
+  {
+   "gap_s": 0.9,
+   "lufs": -18.9,
+   "peak_dbtp": -1.4
+  },
+  {
+   "gap_s": 0.65,
+   "lufs": -13.1,
+   "peak_dbtp": -0.6
+  },
+  {
+   "gap_s": 0.9,
+   "lufs": null,
+   "peak_dbtp": null
+  },
+  {
+   "gap_s": 0.85,
+   "lufs": -11.6,
+   "peak_dbtp": 0.2
+  },
+  {
+   "gap_s": 3.43,
+   "lufs": -18.9,
+   "peak_dbtp": -0.6
+  },
+  {
+   "gap_s": 2.82,
+   "lufs": -15.2,
+   "peak_dbtp": -1.6
+  },
+  {
+   "gap_s": 0.8,
+   "lufs": null,
+   "peak_dbtp": null
+  },
+  {
+   "gap_s": 2.3,
+   "lufs": null,
+   "peak_dbtp": null
+  },
+  {
+   "gap_s": 5.0,
+   "lufs": -14.7,
+   "peak_dbtp": -5.4
+  },
+  {
+   "gap_s": 5.82,
+   "lufs": -19.7,
+   "peak_dbtp": -4.2
+  },
+  {
+   "gap_s": 11.2,
+   "lufs": null,
+   "peak_dbtp": null
+  },
+  {
+   "gap_s": 2.0,
+   "lufs": -19.6,
+   "peak_dbtp": -4.3
+  },
+  {
+   "gap_s": 2.2,
+   "lufs": -14.3,
+   "peak_dbtp": -0.4
+  },
+  {
+   "gap_s": 2.53,
+   "lufs": -15.9,
+   "peak_dbtp": -0.0
+  },
+  {
+   "gap_s": 2.63,
+   "lufs": -16.4,
+   "peak_dbtp": -8.6
+  },
+  {
+   "gap_s": 0.97,
+   "lufs": -20.7,
+   "peak_dbtp": -3.7
+  },
+  {
+   "gap_s": 0.67,
+   "lufs": -14.2,
+   "peak_dbtp": -0.8
+  },
+  {
+   "gap_s": 3.27,
+   "lufs": -16.2,
+   "peak_dbtp": -1.2
+  },
+  {
+   "gap_s": 2.58,
+   "lufs": null,
+   "peak_dbtp": null
+  },
+  {
+   "gap_s": 0.5,
+   "lufs": -12.9,
+   "peak_dbtp": 0.8
+  },
+  {
+   "gap_s": 1.87,
+   "lufs": -12.5,
+   "peak_dbtp": -1.2
+  },
+  {
+   "gap_s": 1.42,
+   "lufs": null,
+   "peak_dbtp": null
+  },
+  {
+   "gap_s": 0.93,
+   "lufs": -13.5,
+   "peak_dbtp": -0.4
+  },
+  {
+   "gap_s": 0.9,
+   "lufs": -13.9,
+   "peak_dbtp": -0.4
+  },
+  {
+   "gap_s": 0.83,
+   "lufs": -14.0,
+   "peak_dbtp": -0.1
+  },
+  {
+   "gap_s": 2.1,
+   "lufs": -17.0,
+   "peak_dbtp": -1.9
+  },
+  {
+   "gap_s": 1.0,
+   "lufs": -14.1,
+   "peak_dbtp": -1.5
+  }
+ ]
+}

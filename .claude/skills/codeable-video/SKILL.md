@@ -25,7 +25,11 @@ show), `docs/OPUS_VIDEO_RESEARCH.md` (how public code-rendered videos are made).
    - Fonts and media stay local and are declared with rights.
    - Mark semantic lines with `data-vch-id`.
 4. **Preview cheaply.** `python -m vch stills <contract> --beats --out runs/<name>-stills-NNN --trust-scene-code`.
-   Open `sheet.jpg` and actually look. Fix the warnings in `stills.json` before rendering.
+   Open `sheet.jpg` and actually look. Fix the warnings in `stills.json` before rendering. Add
+   `--motion` to check that holds keep moving (next-frame change ≥ 0.5).
+   - If the brief points at a reference ("as rich as this"), profile both:
+     `vch profile <file> --out <dir>`, then `vch profile-compare a/profile.json b/profile.json`.
+   - Don't edit project files while `vch run` renders. The source check invalidates the run.
 5. **Render + measure.** `python -m vch run <contract> --out runs/<name>-NNN --trust-scene-code`.
    - Read `report.md`.
    - Inspect `contact-sheet.jpg` and `frames/` (decoded from the MP4).
@@ -44,6 +48,10 @@ show), `docs/OPUS_VIDEO_RESEARCH.md` (how public code-rendered videos are made).
 | HITS | A cue without a sound, or a sound placed by its file start → declared hits; align layers by `peak` |
 | Loudness | Transient-only audio cannot reach the target under the ceiling → lower the target or supply a mastered, licensed bed |
 | "non-local resources" | CDN font or library → vendor it with a licence record |
+| CONTRAST on a label that looked fine | The label never settled: it appeared within ~1 s of its panel leaving, or artwork flew behind it → give it time, re-route the artwork |
+| SAFE during an entrance | An underdamped spring overshot the margin → ease-out for entrances that start at a margin |
+| DEAD-TIME inside a busy-looking station | Small labels change only ~0.1/255 of the frame → camera push-ins on cues, or bigger moving elements; never animated grain |
+| Sparse next to a reference | Fewer edges / grid cells in `profile-compare` → kicker + headline + description + a working mechanism per beat, persistent HUD, real data |
 
 7. **Report** the commands actually run, artifact paths, the failing and unmeasured requirement
    IDs, and that human reviews stay pending until the named reviewer decides. Never approve a human

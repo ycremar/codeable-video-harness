@@ -1,5 +1,6 @@
 """HTML composition backend. Browser tests are opt-in (VCH_TEST_BROWSER=1), like pdoom's."""
 import copy
+import hashlib
 import json
 import os
 import shutil
@@ -9,7 +10,8 @@ from pathlib import Path
 
 import numpy as np
 
-from vch.core import validate
+from vch.backends import create_renderer
+from vch.core import canonical, load_contract, validate
 from vch.evaluate import evaluate
 from vch.pipeline import render
 from vch.production import writable
@@ -198,6 +200,23 @@ class HtmlBrowserTests(unittest.TestCase):
             out = render(copy.deepcopy(spec), ROOT, Path(d)/'run', True)
             result = evaluate(out)
         self.assertTrue(result['machine_ok'], [r for r in result['requirements'] if r['status'] != 'pass'])
+
+    def test_dense_example_loads_its_sources_and_seeks_purely(self):
+        spec, root = load_contract(ROOT/'examples/how-code-becomes-video.json')
+        renderer = create_renderer(spec, root, True)
+        try:
+            order = [0.0, 9.9, 21.9, 46.0, 21.9, 0.0, 46.0, 9.9]
+            shots = {}
+            for t in order:
+                frame = renderer.render(t)
+                key = hashlib.sha256(frame.image.tobytes() + canonical(frame.elements).encode()).hexdigest()
+                self.assertEqual(shots.setdefault(t, key), key, f'seek order changed t={t}')
+            texts = ' '.join(e['text'] for e in renderer.render(9.9).elements if e.get('type') in ('text', 'text-group'))
+        finally:
+            renderer.close()
+        # Counts on screen come from the contract and the corpus file, not from literals in the composition.
+        self.assertIn(f"{len(spec['requirements'])} requirements, frozen before the render", texts)
+        self.assertIn('frame 0297 / 1,440', texts)
 
 
 if __name__ == '__main__':

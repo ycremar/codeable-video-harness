@@ -13,6 +13,7 @@ This is defence in depth, not an OS-level sandbox for untrusted code.
 """
 from __future__ import annotations
 
+import base64
 import io
 import json
 import mimetypes
@@ -30,6 +31,8 @@ from .core import Frame, contained, contrast_rgb, finite, temporal_average
 
 RUNTIME = Path(__file__).with_name("html_runtime.js")
 PAGE_TIMEOUT_MS = 60000
+# Playwright's own screenshot hid text carets; keep that so a focused field never blinks into a frame.
+HIDE_CARET_CSS = "* { caret-color: transparent !important; }"
 TEXT_COLOR_TOLERANCE = 60.0
 MIN_BACKING_FRACTION = 0.15
 CHROMIUM_ARGS = [
@@ -40,6 +43,8 @@ CHROMIUM_ARGS = [
     "--disable-background-networking", "--no-pings", "--font-render-hinting=none",
     # Partial re-raster makes antialiasing at clip edges depend on the previously drawn frame.
     "--disable-partial-raster",
+    # GPU-rasterised 2D canvas caches paths: a page's first draw of a shape can differ from later draws.
+    "--disable-accelerated-2d-canvas",
 ]
 EXTRA_TYPES = {".js": "text/javascript", ".mjs": "text/javascript", ".wasm": "application/wasm",
                ".glb": "model/gltf-binary", ".gltf": "model/gltf+json", ".woff2": "font/woff2"}
@@ -169,6 +174,8 @@ class HtmlRenderer:
         self.page.set_default_timeout(PAGE_TIMEOUT_MS)
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
         self.page.goto(f"{self.server.origin}/{self.entry}", wait_until="load")
+        self.page.add_style_tag(content=HIDE_CARET_CSS)
+        self.cdp = context.new_cdp_session(self.page)
         # Load every declared font face up front so no frame renders with a fallback font.
         self.page.evaluate("() => Promise.all([...document.fonts].map((f) => f.load().catch(() => null)))")
         self.page.evaluate("() => document.fonts.ready.then(() => true)")
@@ -209,10 +216,11 @@ class HtmlRenderer:
         return result["elements"]
 
     def _capture(self) -> Image.Image:
+        # Lossless PNG with Chromium's fast zlib settings: pixel-identical to page.screenshot, about 2.5x faster.
         v = self.spec["video"]
-        png = self.page.screenshot(type="png", clip={"x": 0, "y": 0, "width": v["width"], "height": v["height"]},
-                                   animations="allow", caret="hide", scale="css")
-        return Image.open(io.BytesIO(png)).convert("RGB")
+        clip = {"x": 0, "y": 0, "width": v["width"], "height": v["height"], "scale": 1}
+        shot = self.cdp.send("Page.captureScreenshot", {"format": "png", "optimizeForSpeed": True, "clip": clip})
+        return Image.open(io.BytesIO(base64.b64decode(shot["data"]))).convert("RGB")
 
     def _with_contrast(self, image: Image.Image, elements: list[dict[str, Any]]) -> list[dict[str, Any]]:
         rgb = np.asarray(image)

@@ -85,7 +85,29 @@ python -m vch run examples/html.json --out runs/code-to-frames-001 --trust-scene
 python -m vch profile runs/code-to-frames-001/video.mp4 --out runs/profile-001
 ```
 
-The example is `compositions/code-to-frames/index.html`, an original 12-second film:
+Two original HTML examples:
+
+- **`examples/how-code-becomes-video.json`**: `compositions/how-code-becomes-video/`, a 48-second
+  1080p explainer of how these videos are made, built the same way.
+  - One continuous camera over one world: a 475-tile wall, five stations a card travels through,
+    and dots for 38 measured files.
+  - Every number on screen is read at load time from the contract, the composition's own source,
+    or `corpus.json`.
+  - Its 74 cues also time the picture. A chord bed is ducked under each cue.
+  - It passes all 22 machine requirements: loudness −16.7 LUFS after encode, worst cue 9 ms from
+    its detected peak, 24 px minimum text, 4.8:1 minimum contrast, longest still hold 1.17 s.
+  - Two human reviews stay pending: craft, and whether every number traces to its source.
+  - It renders in about 6 minutes.
+
+  ```sh
+  python -m vch stills examples/how-code-becomes-video.json --times 9.9,21.9,40.5 --motion --out runs/hc-stills-001 --trust-scene-code
+  python -m vch run examples/how-code-becomes-video.json --out runs/hc-001 --trust-scene-code
+  python -m vch profile runs/hc-001/video.mp4 --out runs/hc-001-profile
+  python -m vch profile-compare reference-profile/profile.json runs/hc-001-profile/profile.json
+  ```
+
+- **`examples/html.json`**: `compositions/code-to-frames/index.html`, a 12-second minimal film used
+  by the browser tests:
 
 - Cue sounds are synthesized on 19 declared hits.
 - Its contract passes 20 machine requirements: duration, frame count, timestamps,
@@ -99,8 +121,9 @@ thresholds.
 
 `vch profile` measures any video or audio file, such as a licensed reference, a
 song or your candidate. It reports cuts, visual events, holds, pops, loudness,
-onsets, tempo and phase. It describes pacing; it is not a quality score or a
-licence to copy style.
+onsets, tempo and phase, plus detail proxies: edge density, grid coverage and
+colourfulness. `vch profile-compare` puts two profiles side by side. Profiles
+describe pacing and density; they are not quality scores or a licence to copy style.
 
 Claude Code users get the `codeable-video` skill (`.claude/skills/`) and
 `CLAUDE.md` → `AGENTS.md`.
@@ -230,7 +253,7 @@ claim. A malicious scene can lie in telemetry; inspect decoded frames independen
 | `vch/` | Contract, production loop, narration, renderers, evaluator, CLI |
 | `vch/html_backend.py`, `vch/html_runtime.js` | HTML composition renderer and injected seek/telemetry runtime |
 | `vch/signals.py`, `vch/audio.py`, `vch/tools.py` | Decoded-media signals, cue/mix audio, stills/storyboard/profile tools |
-| `compositions/` | Agent-editable HTML compositions (`code-to-frames` example) |
+| `compositions/` | Agent-editable HTML compositions (`how-code-becomes-video`, `code-to-frames`) |
 | `backends/pdoom/` | Original browser scene system + pinned MIT pdoom primitives |
 | `benchmarks/reference/` | Prompt, fixed contract, saved response and execution results |
 | `scenes/` | Agent-editable pure-time scene modules |

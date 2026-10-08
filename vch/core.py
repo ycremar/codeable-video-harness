@@ -16,7 +16,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageColor
 
 BACKENDS = ("pillow", "pdoom", "html")
 AUDIO_MODES = ("none", "procedural", "file", "mix")
-HIT_KINDS = ("tick", "impact", "chime")
+HIT_KINDS = ("tick", "impact", "chime", "whoosh")
 MAX_HITS = 2000
 # Files that carry third-party rights when they sit inside an HTML composition folder.
 COMPOSITION_MEDIA_SUFFIXES = {
@@ -94,6 +94,8 @@ def _validate_audio(audio, assets, duration):
             raise ValueError("Procedural gain must be 0..0.9")
         if type(audio.get("bed", True)) is not bool:
             raise ValueError("audio.bed must be true or false")
+        if not finite(audio.get("pad", 0)) or not 0 <= audio.get("pad", 0) <= 2:
+            raise ValueError("audio.pad (sustained chord bed level relative to cue hits) must be 0..2")
     if mode == "mix":
         layers = audio.get("layers", [])
         if not isinstance(layers, list) or not layers and not audio.get("procedural_hits"):

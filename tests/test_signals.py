@@ -16,6 +16,34 @@ def click_track(times, seconds, kind='tick'):
     return track
 
 
+class DensityTests(unittest.TestCase):
+    def test_flat_frame_has_no_detail(self):
+        flat = np.full((90, 160, 3), 40, dtype=np.uint8)
+        density = signals.frame_density(flat)
+        self.assertEqual(density['edge_density'], 0.0)
+        self.assertEqual(density['used_cells'], 0.0)
+        self.assertAlmostEqual(density['colourfulness'], 0.0)
+
+    def test_detail_in_one_corner_uses_few_cells(self):
+        frame = np.full((90, 160, 3), 20, dtype=np.uint8)
+        frame[5:20, 5:25:2] = 230  # thin vertical strokes, like text, in one grid cell
+        corner = signals.frame_density(frame)
+        frame[:, ::4] = 230        # strokes across the whole frame
+        spread = signals.frame_density(frame)
+        self.assertGreater(corner['edge_density'], 0)
+        self.assertLess(corner['used_cells'], 0.1)
+        self.assertEqual(spread['used_cells'], 1.0)
+        self.assertGreater(spread['edge_density'], corner['edge_density'])
+
+    def test_colourfulness_orders_grey_below_saturated(self):
+        grey = np.full((90, 160, 3), 128, dtype=np.uint8)
+        vivid = grey.copy()
+        vivid[:, :80] = (230, 40, 40)
+        vivid[:, 80:] = (40, 60, 230)
+        self.assertGreater(signals.frame_density(vivid)['colourfulness'], 50)
+        self.assertAlmostEqual(signals.frame_density(grey)['colourfulness'], 0.0)
+
+
 class OnsetTests(unittest.TestCase):
     def test_onsets_land_on_measured_peaks(self):
         times = [0.0, 0.5, 1.25, 2.0]

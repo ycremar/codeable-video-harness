@@ -106,6 +106,23 @@ HTML telemetry comes from the live DOM. Observations are text nodes, plus `text-
 - `text_present` / `text_absent` search text and text-group observations. Geometry metrics use
   only text nodes.
 
+## Reference comparison (`vch profile`, `vch profile-compare`)
+
+`vch profile` also samples decoded frames every 0.5 s at up to 480 px and reports three detail
+proxies. They are not contract metrics.
+
+| Proxy | Definition | Limits |
+|---|---|---|
+| edge density | Share of pixels whose Sobel luma step exceeds 24/255 | Text, linework and texture all count; noise and film grain inflate it |
+| grid cells in use | Share of a 12×6 grid whose cells contain at least 2% edge pixels | A single small element in an otherwise empty frame scores low by design |
+| colourfulness | Hasler & Süsstrunk (2003) opponent-colour statistic | Says nothing about palette quality or brand fit |
+
+`vch profile-compare a/profile.json b/profile.json` prints these next to pacing and loudness for two
+files. The table gives ratios, except for loudness, where a ratio of decibel values would mislead.
+Use it to ask why a candidate is sparser than a reference; it cannot say which is better. In the
+study, a deliberately minimal corpus film scored 0.018 edge density against the requested
+explainer's 0.088.
+
 ## Production evidence additions
 
 All of these are explicitly proxies: `planned_scene_count` counts declared windows;

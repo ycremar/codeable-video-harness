@@ -106,7 +106,71 @@ composition. The example loops on the wall clock when `__vch.harness` is absent.
   that require it.
 - WebGL uses software SwiftShader.
 - Partial re-raster is disabled because it made clip-edge pixels depend on the previous frame.
+- 2D canvas is rasterised on the CPU. On the GPU, a page's first draw of a path could differ from
+  later draws of the same path (3 pixels, ±7 levels), which makes frames depend on seek history.
+- Frames are captured as lossless PNG with Chromium's fast compression setting: identical pixels,
+  about 2.5x faster than Playwright's screenshot call.
 - `render.samples` (1..16) blends sub-frames in linear light for motion blur.
+
+## Dense explainers
+
+`examples/how-code-becomes-video.json` (48 s, 1080p) was built to match the information density
+of a reference explainer. Measure the reference and your candidate with the same proxies before
+judging by eye:
+
+```sh
+python -m vch profile reference.mp4 --out runs/ref-profile
+python -m vch profile runs/<name>-NNN/video.mp4 --out runs/<name>-NNN-profile
+python -m vch profile-compare runs/ref-profile/profile.json runs/<name>-NNN-profile/profile.json
+```
+
+Edge density and grid coverage are detail proxies, not information. What added information in that
+film:
+
+- **One world, one camera, no hard cuts.** Stations sit along a line, and a card travels between
+  them. Panels float above the line and move with it, so every transition comes from the previous
+  state.
+- **A persistent HUD.** A live `t`/frame readout and a station rail say where the viewer is.
+- **Each station has a kicker, a headline, a one-line description and a mechanism.** The mechanism
+  shows the process working with real data. Examples: this film's own requirements sorted into
+  bins, its own `seek(t)` source and a seek preview, its own cue sheet with a playhead, and
+  measured corpus files as dots.
+- **Numbers are bound to their sources at load time.** The film reads `/contract.json`, its own
+  source and a data file, so a count on screen cannot drift from the thing it counts.
+- **Self-render miniatures** (`drawWorld(ctx, t)` into a small canvas) show the film's own frames
+  in previews, filmstrips and a closing contact sheet. They are pure, so caching them is safe.
+
+Timing rules learned from its failed checks:
+
+- **Give every label at least ~1 s fully visible before the camera leaves.** A label that is still
+  fading in when its panel fades out never settles. The contrast check then measures it
+  half-transparent.
+- **Flying artwork must not pass behind text.** Its colour becomes the text's backing.
+- **Entrances that start at a safe-area margin must not overshoot.** Use ease-out there, not an
+  underdamped spring.
+- **Composite a panel as a unit** (draw it into its own canvas, then place it once with the panel's
+  alpha). Otherwise an inner `globalAlpha = 1` pops its contents ahead of the fade.
+- **A closing hold still needs motion.** The finale's slow drift failed `max_static_hold_s`. A
+  moving highlight over the contact sheet fixed it, without excluding the window.
+
+**Finishing without fake motion.** Flat vector art reads as lit when bright parts bleed light.
+That film thresholds its canvas by contrast, blurs it at quarter size and adds it back. Panels get
+a glass gradient, a rim highlight and a soft shadow on the main canvas, and lit gates cast pools
+of light. The grain texture is fixed. Animated grain changes every pixel on every frame, which the
+dead-time proxy would read as motion. Generative enhancement of stills (for example Magnific) is a
+paid, generative step outside this harness. If you use one, declare it, keep its inputs and
+outputs, and leave a human review of what it changed.
+
+## Audio cues and bed
+
+- **Hit kinds:** `tick`, `impact`, `chime` and `whoosh`. A whoosh is a 0.42 s tonal riser that
+  lands on an impact, so placing it by its peak puts the swell before the cue. It is tonal because
+  broadband noise raises spectral flux on every hop and hid the landing from onset detection.
+- **`audio.pad`** (0..2, relative to cue level) adds an original sustained chord bed. The bed dips
+  by 70% from 50 ms before each cue, so each cue's own peak stays the loudest sample, which is what
+  `audio_hit_sync_ms` measures. It recovers over 0.5 s so the bed's return does not read as a new
+  transient.
+- With `pad: 1.4` and a −2 dBFS ceiling, a 74-cue mix reaches about −16 LUFS without a limiter.
 
 ## Preview loop before the full render
 
@@ -114,7 +178,12 @@ composition. The example loops on the wall clock when `__vch.harness` is absent.
 python -m vch storyboard examples/html.json                 # timestamped plan from the contract
 python -m vch stills examples/html.json --beats --out runs/stills-001 --trust-scene-code
 python -m vch stills examples/html.json --times 0,2.5,6.2 --out runs/stills-002 --trust-scene-code
+python -m vch stills examples/html.json --times 3.1,7.4 --motion --out runs/stills-003 --trust-scene-code
 ```
+
+`--motion` also renders each still's next frame and reports their change at the size
+`max_static_hold_s` analyses. Values under 0.5/255 count as still. Check a long hold this way
+before paying for a full render.
 
 Look at `sheet.jpg`. `stills.json` lists the text, overlaps and smallest size for each still.
 These are raw frames from before encoding. Only `vch run` produces decoded evidence.

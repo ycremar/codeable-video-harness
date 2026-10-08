@@ -6,7 +6,7 @@ from .core import load_contract, SceneRenderer, source_manifest
 from .pipeline import render, audit
 from .evaluate import evaluate, review_template, METRIC_TYPES
 from .backends import create_renderer
-from .tools import still_times, render_stills, storyboard_markdown, profile_media, summary_line
+from .tools import still_times, render_stills, storyboard_markdown, profile_media, summary_line, compare_profiles
 
 
 def main():
@@ -20,9 +20,11 @@ def main():
     p=sub.add_parser('stills',help='Render preview stills + sheet before a full render')
     p.add_argument('contract');p.add_argument('--out',required=True);p.add_argument('--times',help='Comma-separated seconds')
     p.add_argument('--beats',action='store_true',help='One still per beat of timing.bpm');p.add_argument('--trust-scene-code',action='store_true')
+    p.add_argument('--motion',action='store_true',help='Also report each still\'s change to the next frame (dead-time proxy)')
     p=sub.add_parser('storyboard',help='Print a timestamped storyboard table from a contract');p.add_argument('contract')
     p=sub.add_parser('profile',help='Measure pacing/sound of a video or audio file (reference or candidate)')
     p.add_argument('media');p.add_argument('--out',required=True);p.add_argument('--every',type=float,default=1.0);p.add_argument('--max-fps',type=float,default=30.0)
+    p=sub.add_parser('profile-compare',help='Side-by-side proxies from two profile.json files');p.add_argument('first');p.add_argument('second')
     p=sub.add_parser('evaluate');p.add_argument('run');p.add_argument('--review');p.add_argument('--project-root')
     p=sub.add_parser('audit');p.add_argument('run');p.add_argument('--project-root')
     p=sub.add_parser('review-template');p.add_argument('run');p.add_argument('--out',required=True)
@@ -46,6 +48,9 @@ def main():
             raise SystemExit(0 if result['state']=='accepted_by_contract' else 3 if result['state']=='needs_review' else 2)
         if args.cmd=='metrics':
             print(json.dumps(METRIC_TYPES,indent=2));return
+        if args.cmd=='profile-compare':
+            first,second=(json.loads(Path(x).read_text()) for x in (args.first,args.second))
+            print(compare_profiles(first,second),end='');return
         if args.cmd=='profile':
             print(json.dumps(summary_line(profile_media(Path(args.media),Path(args.out),every=args.every,max_fps=args.max_fps)),ensure_ascii=False,indent=2));return
         if args.cmd in ('validate','packet','run','still','stills','storyboard'):
@@ -70,7 +75,7 @@ def main():
             print(storyboard_markdown(spec),end='');return
         if args.cmd=='stills':
             times=[float(x) for x in args.times.split(',')] if args.times else None
-            summary=render_stills(spec,root,Path(args.out),times=still_times(spec,times=times,beats=args.beats),trust_code=args.trust_scene_code)
+            summary=render_stills(spec,root,Path(args.out),times=still_times(spec,times=times,beats=args.beats),trust_code=args.trust_scene_code,motion=args.motion)
             print(json.dumps({'out':args.out,'stills':len(summary['stills']),'warnings':summary['warnings']},ensure_ascii=False,indent=2));return
         if args.cmd=='still':
             path=Path(args.out)

@@ -23,9 +23,18 @@ from .signals import loudness_of_samples
 SAMPLE_RATE = 48000
 DEFAULT_BPM = 120
 DEFAULT_CEILING_DBFS = -1.0
-HIT_SECONDS = {"tick": 0.06, "impact": 0.35, "chime": 0.9}
+HIT_SECONDS = {"tick": 0.06, "impact": 0.35, "chime": 0.9, "whoosh": 0.62}
 DECODE_TIMEOUT_S = 300
 FADE_OUT_S = 0.01
+WHOOSH_SWELL_S = 0.42
+WHOOSH_FROM_HZ, WHOOSH_TO_HZ = 180.0, 1400.0
+DUCK_DEPTH = 0.7
+DUCK_ATTACK_S, DUCK_LEAD_S, DUCK_RELEASE_S = 0.07, 0.05, 0.5
+# A minor 9, F major 7, C major 7, G add 9 (MIDI notes, bass first); one chord per two 4/4 bars.
+PAD_CHORDS = ((45, 57, 60, 64, 71), (41, 53, 57, 60, 64), (36, 48, 55, 59, 64), (43, 55, 59, 62, 69))
+PAD_BEATS_PER_CHORD = 8
+PAD_FADE_S = 0.9
+PAD_DETUNE = 0.0015
 
 
 def beat_bed(*, duration: float, bpm: float, offset: float, rate: int = SAMPLE_RATE) -> np.ndarray:
@@ -51,8 +60,77 @@ def _synthesize(kind: str, t: np.ndarray) -> np.ndarray:
         body = np.sin(2 * np.pi * (52 * t + 40 * (1 - np.exp(-25 * t)) / 25)) * np.exp(-9 * t)
         click = np.sin(2 * np.pi * 1800 * t) * np.exp(-140 * t) * .35
         return body + click
+    if kind == "whoosh":
+        return _whoosh(t)
     partials = [(880, 1.0), (1320, .45), (1760, .25), (2640, .12)]
     return sum(a * np.sin(2 * np.pi * f * t) for f, a in partials) * np.exp(-5 * t) * (1 - np.exp(-900 * t)) * .5
+
+
+def _whoosh(t: np.ndarray) -> np.ndarray:
+    """A rising tonal sweep for WHOOSH_SWELL_S that lands on a soft impact (the measured peak).
+
+    Tonal rather than noise: broadband noise raises spectral flux on every hop and hides the landing.
+    """
+    rise = np.clip(t / WHOOSH_SWELL_S, 0, 1)
+    phase = 2 * np.pi * WHOOSH_SWELL_S * (WHOOSH_FROM_HZ * rise + (WHOOSH_TO_HZ - WHOOSH_FROM_HZ) * rise ** 3 / 3)
+    after = np.clip(t - WHOOSH_SWELL_S, 0, None)
+    sweep = (np.sin(phase) + 0.3 * np.sin(2 * phase)) * np.where(t < WHOOSH_SWELL_S, rise ** 3, np.exp(-60 * after))
+    landing = _synthesize("impact", after) * (t >= WHOOSH_SWELL_S)
+    return 0.3 * sweep + 0.7 * landing
+
+
+def pad_bed(*, duration: float, bpm: float, offset: float, rate: int = SAMPLE_RATE) -> np.ndarray:
+    """An original sustained chord bed, peak-normalised to 1: one chord per two bars, equal-gain crossfades.
+
+    Oscillators run on absolute time, so the same chord never restarts its phase at a boundary.
+    """
+    n = round(rate * duration)
+    signal = np.zeros(n)
+    span = PAD_BEATS_PER_CHORD * 60 / bpm
+    start = offset - span * math.ceil(offset / span)
+    index = 0
+    while start < duration:
+        a, b = max(0, round((start - PAD_FADE_S) * rate)), min(n, round((start + span + PAD_FADE_S) * rate))
+        if b > a:
+            t = np.arange(a, b) / rate
+            local = t - start
+            rise = np.clip((local + PAD_FADE_S) / (2 * PAD_FADE_S), 0, 1)
+            fall = np.clip((span + PAD_FADE_S - local) / (2 * PAD_FADE_S), 0, 1)
+            envelope = np.sin(rise * np.pi / 2) ** 2 * np.sin(fall * np.pi / 2) ** 2
+            signal[a:b] += _chord(PAD_CHORDS[index % len(PAD_CHORDS)], t) * envelope
+        start += span
+        index += 1
+    peak = float(np.max(np.abs(signal))) if n else 0.0
+    return signal / peak if peak > 0 else signal
+
+
+def duck_envelope(length: int, times: list[float], *, rate: int = SAMPLE_RATE) -> np.ndarray:
+    """Gain curve that dips a bed by DUCK_DEPTH around each cue so the cue's own peak stays the loudest sample.
+
+    The dip is complete DUCK_LEAD_S before the cue (onset peak search looks slightly earlier than the
+    cue) and recovers slowly, so the returning bed does not read as a new transient.
+    """
+    envelope = np.ones(length)
+    attack, lead, release = (round(x * rate) for x in (DUCK_ATTACK_S, DUCK_LEAD_S, DUCK_RELEASE_S))
+    shape = np.concatenate([np.sin(np.linspace(0, np.pi / 2, attack)) ** 2, np.ones(lead),
+                            np.cos(np.linspace(0, np.pi / 2, release)) ** 2])
+    for at in times:
+        first = round(at * rate) - lead - attack
+        a, b = max(0, first), min(length, first + len(shape))
+        if b > a:
+            envelope[a:b] = np.minimum(envelope[a:b], 1 - DUCK_DEPTH * shape[a - first:b - first])
+    return envelope
+
+
+def _chord(notes: tuple[int, ...], t: np.ndarray) -> np.ndarray:
+    voice = np.zeros(len(t))
+    for j, note in enumerate(notes):
+        f = 440 * 2 ** ((note - 69) / 12)
+        amplitude = 0.5 if j == 0 else 0.22
+        for detune in (-PAD_DETUNE, PAD_DETUNE):
+            w = 2 * np.pi * f * (1 + detune) * t
+            voice += amplitude * (np.sin(w + j) + 0.25 * np.sin(2 * w))
+    return voice
 
 
 def hit_sound(kind: str, *, rate: int = SAMPLE_RATE) -> np.ndarray:
@@ -126,13 +204,17 @@ def procedural_track(spec: dict[str, Any]) -> tuple[np.ndarray, dict[str, Any]]:
     config, duration = spec["audio"], spec["video"]["duration"]
     timing = spec.get("timing", {})
     track = np.zeros(round(SAMPLE_RATE * duration), dtype=np.float64)
+    bpm, offset = timing.get("bpm", DEFAULT_BPM), timing.get("beat_offset", 0)
     if config.get("bed", True):
-        track += beat_bed(duration=duration, bpm=timing.get("bpm", DEFAULT_BPM), offset=timing.get("beat_offset", 0))
+        track += beat_bed(duration=duration, bpm=bpm, offset=offset)
+    if config.get("pad"):
+        bed = config["pad"] * pad_bed(duration=duration, bpm=bpm, offset=offset)
+        track += bed * duck_envelope(len(track), [h["t"] for h in normalized_hits(timing)])
     hits = _hit_placements(spec, track)
     # Same normalisation as the original bed: shrink only if the sum would clip, then apply gain.
     peak = max(1, float(np.max(np.abs(track))) if len(track) else 0.0)
     track = track / peak * config["gain"]
-    return track, {"mode": "procedural", "bed": bool(config.get("bed", True)), "hits": hits}
+    return track, {"mode": "procedural", "bed": bool(config.get("bed", True)), "pad": config.get("pad", 0), "hits": hits}
 
 
 def mix_track(spec: dict[str, Any], root: Path) -> tuple[np.ndarray, dict[str, Any]]:
