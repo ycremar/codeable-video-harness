@@ -593,7 +593,7 @@ function shotC(t) {
 }
 function shotD(t) {
   // While the action runs at a few percent speed, the camera keeps orbiting in real time.
-  const P = HERO(), u = clamp((t - 14.5) / 4.5), a = lerp(-0.3, 0.85, smooth((t - 14.6) / 4.2));
+  const P = HERO(), u = clamp((t - 14.5) / 4.5), a = lerp(-0.35, 1.25, 0.55 * clamp((t - 14.5) / 4.5) + 0.45 * smooth((t - 14.5) / 4.5));
   const off = v3(0.8, 0.15, -0.86).applyAxisAngle(v3(0, 1, 0), a).multiplyScalar(lerp(1.08, 0.86, ease(u)));
   const tr = BALLS.find((x) => x.contact !== undefined), pos = P.clone().add(off), b = ballAt(tr, t);
   const look = P.clone().add(v3(0, -0.02, 0.02));
@@ -602,8 +602,8 @@ function shotD(t) {
 }
 function shotE(t) {
   const T = TARGET_E(), u = clamp((t - 19) / 4.5);
-  const phi = lerp(0.5, -0.5, u), r = lerp(2.9, 1.9, ease(u));
-  const pos = T.clone().add(v3(r * Math.sin(phi), lerp(5.9, 4.0, ease(u)), r * Math.cos(phi)));
+  const phi = lerp(0.7, -0.75, u), r = lerp(3.0, 1.8, u);
+  const pos = T.clone().add(v3(r * Math.sin(phi), lerp(6.0, 3.7, u), r * Math.cos(phi)));
   return { pos, look: T.clone().add(v3(0, 0, -0.25)), fov: 40, focus: pos.distanceTo(T), aperture: 0.0007, maxblur: 0.008 };
 }
 function shotF(t) {
@@ -615,8 +615,8 @@ function shotF(t) {
 }
 function shotG(t) {
   const u = clamp((t - 27.5) / 4.5);
-  const pos = v3(L2 + 2.9, 0.42, -1.8).lerp(v3(L2 + 1.3, 0.66, -4.6), u * 0.7 + 0.3 * easeOut(u));
-  const look = v3(L2 - 0.7, 1.2, -8).lerp(v3(L2 + 0.2, 1.15, -8), u);
+  const pos = v3(L2 + 3.3, 0.40, -1.2).lerp(v3(L2 + 0.4, 0.76, -5.4), u);
+  const look = v3(L2 - 1.2, 1.2, -8).lerp(v3(L2 + 0.6, 1.1, -8), u);
   return { pos, look, fov: 34, focus: pos.distanceTo(v3(L2 - 0.2, 0.6, NETZ)), aperture: 0.0014, maxblur: 0.01 };
 }
 const SHOTS = [[0, 5, shotA], [5, 10, shotB], [10, 14.5, shotC], [14.5, 19, shotD], [19, 23.5, shotE], [23.5, 27.5, shotF], [27.5, 32.01, shotG]];
@@ -699,7 +699,7 @@ function seek(t) {
   hemi.intensity = inMatch ? 0.3 : 0.12 * Math.max(...lv);
   scene.environmentIntensity = inMatch ? 0.14 : 0.12 * Math.max(...lv);
   key.position.copy(LK.key[0]); key.target.position.copy(LK.key[1]); key.target.updateMatrixWorld();
-  if (id === 6) key.position.x = lerp(L2 - 1.5, L2 + 3.0, clamp((t - 27.5) / 4.5));
+  if (id === 6) key.position.x = lerp(L2 - 2.5, L2 + 4.0, clamp((t - 27.5) / 4.5));
   key.angle = LK.angle; key.intensity = LK.I * (id === 0 ? lv[1] : 1) * dimEnd;
 
   // Machines: the lane-3 head re-aims at each target before it fires; every machine recoils when it fires.
