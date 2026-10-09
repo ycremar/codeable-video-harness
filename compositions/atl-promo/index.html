@@ -1,0 +1,1023 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A Tennis Lab</title>
+<!--
+  A Tennis Lab promo (contracts: examples/atl-promo.json 16:9, examples/atl-promo-vertical.json 9:16).
+  One three.js world: an indoor studio of four clay half-court lanes and The Wall, plus a separate clay
+  match court. Every property is set from t inside seek(t); balls fly on closed-form parabolas, marks and
+  dust are functions of each bounce time, and the slow-motion shot maps real time through a fixed warp.
+  Colours come from contract.style (styles/clay-court.json). Sound is synthesized below.
+-->
+<style>
+  @font-face { font-family: "Inter"; src: url("/assets/fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
+  @font-face { font-family: "JBMono"; src: url("/assets/fonts/JetBrainsMono.ttf") format("truetype"); font-weight: 100 800; }
+  @font-face { font-family: "Instrument Serif"; src: url("/assets/fonts/InstrumentSerif-Regular.ttf") format("truetype"); font-style: normal; }
+  @font-face { font-family: "Instrument Serif"; src: url("/assets/fonts/InstrumentSerif-Italic.ttf") format("truetype"); font-style: italic; }
+  @font-face { font-family: "NotoSerifSC"; src: url("/assets/fonts/NotoSerifSC-ATLSubset.ttf") format("truetype"); }
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  #stage { position: relative; overflow: hidden; transform-origin: 0 0; font-family: "Inter", sans-serif; color: var(--cream); background: #000; }
+  canvas { position: absolute; left: 0; top: 0; }
+  .scrim { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; will-change: opacity; }
+  .block { position: absolute; will-change: opacity, transform; }
+  .kick { font: 600 26px/1.25 "Inter", sans-serif; letter-spacing: 0.3em; color: var(--cream); white-space: nowrap; display: flex; align-items: center; }
+  .kick .rule { display: inline-block; height: 2px; width: 56px; margin-right: 22px; background: var(--clay-light); transform-origin: 0 50%; }
+  .head { font-family: "Instrument Serif", serif; font-weight: 400; font-size: 116px; line-height: 1.0; letter-spacing: -0.01em; color: var(--cream); margin-top: 18px; }
+  .head em { font-style: italic; }
+  .sub { font: 400 32px/1.35 "Inter", sans-serif; color: var(--cream); margin-top: 22px; letter-spacing: 0.005em; }
+  .zh { font-family: "NotoSerifSC", serif; font-size: 58px; line-height: 1.2; letter-spacing: 0.24em; color: var(--cream); margin-top: 26px; }
+  .mask { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 0.04em 0.14em 0; margin-bottom: -0.14em; }
+  .word { display: inline-block; will-change: transform; }
+  .label { position: absolute; left: 0; top: 0; font: 600 24px/1 "JBMono", monospace; letter-spacing: 0.16em; color: var(--cream); white-space: nowrap;
+           padding: 10px 14px; background: rgba(8, 42, 30, 0.82); border-left: 3px solid var(--clay-light); will-change: opacity, transform; }
+  .card { position: absolute; left: 0; top: 0; width: 100%; display: flex; flex-direction: column; align-items: center; text-align: center; }
+  .card .kick { justify-content: center; letter-spacing: 0.42em; }
+  .word-mark { font-family: "Instrument Serif", serif; font-size: 176px; line-height: 1.0; letter-spacing: -0.015em; color: var(--cream); margin-top: 20px; }
+  .card .sub { margin-top: 16px; }
+  .cta { margin-top: 46px; font: 600 32px/1 "Inter", sans-serif; letter-spacing: 0.02em; color: var(--green-deep); background: var(--cream);
+         padding: 24px 46px; border-radius: 999px; will-change: opacity, transform; }
+  .url { margin-top: 26px; font: 500 30px/1.2 "Inter", sans-serif; letter-spacing: 0.06em; color: var(--cream); will-change: opacity; }
+  .head, .sub { text-wrap: balance; }
+  .portrait .head { font-size: 98px; }
+  .portrait .word-mark { font-size: 150px; }
+  .portrait .sub { font-size: 34px; }
+</style>
+<script type="importmap">{ "imports": { "three": "/compositions/_vendor/three/build/three.module.js",
+                                         "three/addons/": "/compositions/_vendor/three/addons/" } }</script>
+</head>
+<body>
+<div id="stage"><canvas id="gl"></canvas><div class="scrim" id="scrim"></div><div id="dom"></div></div>
+<script type="module">
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { BokehPass } from "three/addons/postprocessing/BokehPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
+import { clamp, lerp, ease, easeOut, easeIn, smooth, seeded, loadContract, el, show, maskedWords, riseWords, preview } from "/compositions/_lib/clip.js";
+import * as sound from "/compositions/_lib/sound.js";
+
+const vch = (window.__vch = window.__vch || {});
+let W, H, PORTRAIT, S, C, HITS, DUR;
+let renderer, composer, scene, camera, bokeh, bloom, grade;
+const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
+
+// ---------- world constants (metres) ----------
+const RB = 0.0335, G = 9.81;
+const LX = [-14.25, -4.75, 4.75, 14.25], WB = 23.75, LANE_W = 9.5;
+const NETZ = -8, BASEZ = NETZ + 11.885, SERVEZ = NETZ + 6.4, MACHZ = -10.5;
+const WALLZ = -9;
+const M = v3(0, 0, 70);                       // centre of the match court (behind the studio's south wall)
+const L2 = LX[1], L3 = LX[2];
+const mouth = (lane) => v3(LX[lane], 0.66, MACHZ + 0.72);
+
+// ---------- canvas textures (seeded, built once) ----------
+function canvas(w, h) { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; }
+const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+function noiseField(n, rand, cells) {
+  const out = new Float32Array(n * n); let amp = 1, total = 0;
+  for (const c of cells) {
+    const g = new Float32Array(c * c); for (let i = 0; i < g.length; i++) g[i] = rand();
+    for (let y = 0; y < n; y++) {
+      const fy = y / n * c, y0 = Math.floor(fy), ty = fy - y0, sy = ty * ty * (3 - 2 * ty), r0 = (y0 % c) * c, r1 = ((y0 + 1) % c) * c;
+      for (let x = 0; x < n; x++) {
+        const fx = x / n * c, x0 = Math.floor(fx), tx = fx - x0, sx = tx * tx * (3 - 2 * tx), c0 = x0 % c, c1 = (x0 + 1) % c;
+        out[y * n + x] += amp * ((g[r0 + c0] * (1 - sx) + g[r0 + c1] * sx) * (1 - sy) + (g[r1 + c0] * (1 - sx) + g[r1 + c1] * sx) * sy);
+      }
+    }
+    total += amp; amp *= 0.58;
+  }
+  for (let i = 0; i < out.length; i++) out[i] /= total;
+  return out;
+}
+function tex(c, srgb, repeat) {
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+  if (repeat) { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(repeat[0], repeat[1]); }
+  t.anisotropy = 8;
+  return t;
+}
+// Raked clay: fine grain, brushed streaks, loose lighter crumbs; a bump map from the same field.
+function clayTextures() {
+  const n = 1024, rand = seeded(7), f = noiseField(n, rand, [4, 8, 16, 32, 64, 128, 256]);
+  const col = canvas(n, n), bmp = canvas(n, n), gc = col.getContext("2d"), gb = bmp.getContext("2d");
+  const ic = gc.createImageData(n, n), ib = gb.createImageData(n, n);
+  const base = rgb(S.clay), lite = rgb(S.clay_light), dark = rgb(S.clay_dark);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const i = y * n + x;
+    const streak = 0.5 * Math.sin(y * 0.11 + 9 * f[(x * 3 + y * 5) % (n * n)]) * Math.sin(y * 0.013 + 2.0);
+    let k = (f[i] - 0.5) * 2.2 + 0.18 * streak;
+    const q = rand();
+    let crumb = 0;
+    if (q < 0.03) crumb = 0.55 + 0.4 * rand(); else if (q < 0.055) crumb = -0.5 - 0.3 * rand();
+    k += crumb;
+    const tgt = k > 0 ? lite : dark, a = Math.min(1, Math.abs(k) * 0.75);
+    for (let ch = 0; ch < 3; ch++) ic.data[i * 4 + ch] = Math.round(base[ch] + (tgt[ch] - base[ch]) * a);
+    ic.data[i * 4 + 3] = 255;
+    const b = clamp(0.5 + (f[i] - 0.5) * 1.4 + crumb * 0.5) * 255;
+    ib.data[i * 4] = ib.data[i * 4 + 1] = ib.data[i * 4 + 2] = b; ib.data[i * 4 + 3] = 255;
+  }
+  gc.putImageData(ic, 0, 0); gb.putImageData(ib, 0, 0);
+  return { map: tex(col, true, [1, 1]), bump: tex(bmp, false, [1, 1]) };
+}
+// Painted line: off-white with clay dust worked into it.
+function lineTexture() {
+  const n = 256, rand = seeded(17), c = canvas(n, n), g = c.getContext("2d"), img = g.createImageData(n, n);
+  const L = rgb(S.line), K = rgb(S.clay_light);
+  for (let i = 0; i < n * n; i++) {
+    const d = rand() < 0.07 ? 0.35 + 0.4 * rand() : rand() * 0.06;
+    for (let ch = 0; ch < 3; ch++) img.data[i * 4 + ch] = Math.round(L[ch] + (K[ch] - L[ch]) * d);
+    img.data[i * 4 + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  return tex(c, true, [1, 1]);
+}
+// Woven green wall fabric.
+function fabricTexture(hex, seed) {
+  const n = 512, rand = seeded(seed), f = noiseField(n, rand, [8, 32, 128]), c = canvas(n, n), g = c.getContext("2d"), img = g.createImageData(n, n);
+  const B = rgb(hex);
+  for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+    const i = y * n + x, thread = ((x % 4) < 2 ? 1 : 0.92) * ((y % 4) < 2 ? 1 : 0.95), v = (0.82 + 0.3 * f[i]) * thread;
+    for (let ch = 0; ch < 3; ch++) img.data[i * 4 + ch] = Math.min(255, Math.round(B[ch] * v));
+    img.data[i * 4 + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  return tex(c, true, [1, 1]);
+}
+// Tennis-net mesh as an alpha map.
+function netTexture() {
+  const n = 64, c = canvas(n, n), g = c.getContext("2d");
+  g.fillStyle = "#000"; g.fillRect(0, 0, n, n); g.fillStyle = "#fff";
+  g.fillRect(0, 0, n, 5); g.fillRect(0, 0, 5, n);
+  return tex(c, false, [1, 1]);
+}
+// Felt ball with the classic seam, painted in equirectangular UV space.
+function ballTexture() {
+  const w = 512, h = 256, c = canvas(w, h), g = c.getContext("2d"), img = g.createImageData(w, h), rand = seeded(23);
+  const seam = [];
+  for (let k = 0; k < 720; k++) {
+    const s = k / 720 * Math.PI * 2, a = 0.7, b = 0.3;
+    const p = v3(a * Math.cos(s) + b * Math.cos(3 * s), a * Math.sin(s) - b * Math.sin(3 * s), 2 * Math.sqrt(a * b) * Math.sin(2 * s)).normalize();
+    seam.push(p);
+  }
+  const B = rgb(S.ball), f = noiseField(128, rand, [8, 32]);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const phi = x / w * Math.PI * 2, th = y / h * Math.PI;
+    const px = -Math.cos(phi) * Math.sin(th), py = Math.cos(th), pz = Math.sin(phi) * Math.sin(th);
+    let best = -1;
+    for (const q of seam) { const d = px * q.x + py * q.y + pz * q.z; if (d > best) best = d; }
+    const ang = Math.acos(Math.min(1, best)), i = y * w + x;
+    const fuzz = 0.86 + 0.22 * f[((y >> 1) % 128) * 128 + ((x >> 2) % 128)] + 0.06 * rand();
+    const onSeam = smooth((0.05 - ang) / 0.012);
+    for (let ch = 0; ch < 3; ch++) img.data[i * 4 + ch] = Math.round(lerp(B[ch] * fuzz, 236, onSeam));
+    img.data[i * 4 + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  return tex(c, true);
+}
+// A ball mark in clay: a smoothed, darker oval with a lighter crumb fringe.
+function markTexture() {
+  const w = 256, h = 128, c = canvas(w, h), g = c.getContext("2d"), rand = seeded(31);
+  const D = rgb(S.clay_dark), Lt = rgb(S.clay_light);
+  const img = g.createImageData(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const u = (x / w - 0.5) * 2, v = (y / h - 0.5) * 2, r = Math.sqrt(u * u + v * v), i = y * w + x;
+    const core = smooth((0.82 - r) / 0.2), rim = Math.exp(-(((r - 0.9) / 0.08) ** 2)) * (rand() < 0.5 ? 1 : 0.3);
+    const a = Math.max(core * 0.78, rim * 0.55);
+    const m = core > rim ? D : Lt;
+    img.data[i * 4] = m[0]; img.data[i * 4 + 1] = m[1]; img.data[i * 4 + 2] = m[2]; img.data[i * 4 + 3] = Math.round(a * 255);
+  }
+  g.putImageData(img, 0, 0);
+  return tex(c, true);
+}
+function blobTexture() {
+  const n = 128, c = canvas(n, n), g = c.getContext("2d"), gr = g.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+  gr.addColorStop(0, "rgb(220,220,220)"); gr.addColorStop(0.45, "rgb(100,100,100)"); gr.addColorStop(1, "rgb(0,0,0)");
+  g.fillStyle = "#000"; g.fillRect(0, 0, n, n); g.fillStyle = gr; g.fillRect(0, 0, n, n);
+  return tex(c, false);
+}
+// Racket string bed inside the head ellipse.
+function stringTexture(ax, ay) {
+  const w = 1024, h = Math.round(1024 * ay / ax), c = canvas(w, h), g = c.getContext("2d");
+  g.clearRect(0, 0, w, h); g.save();
+  g.beginPath(); g.ellipse(w / 2, h / 2, w / 2 - 14, h / 2 - 14, 0, 0, Math.PI * 2); g.clip();
+  g.fillStyle = "#fff";
+  for (let k = 0; k < 16; k++) { const y = h / 2 + (k - 7.5) * (h - 40) / 16; g.fillRect(0, y - 2.5, w, 5); }
+  for (let k = 0; k < 19; k++) { const x = w / 2 + (k - 9) * (w - 50) / 19; g.fillRect(x - 2.5, 0, 5, h); }
+  g.restore();
+  return tex(c, false);
+}
+function gripTexture() {
+  const c = canvas(64, 512), g = c.getContext("2d");
+  g.fillStyle = S.cream; g.fillRect(0, 0, 64, 512);
+  g.strokeStyle = "rgba(0,0,0,0.22)"; g.lineWidth = 6;
+  for (let k = -8; k < 40; k++) { g.beginPath(); g.moveTo(0, k * 16); g.lineTo(64, k * 16 + 40); g.stroke(); }
+  return tex(c, true);
+}
+
+// ---------- shaders ----------
+const shaftShader = {
+  uniforms: { uColor: { value: new THREE.Color() }, uI: { value: 0 } },
+  vertexShader: `varying vec3 vN; varying vec3 vV; varying float vY;
+    void main() { vec4 wp = modelMatrix * vec4(position, 1.0); vN = normalize(mat3(modelMatrix) * normal);
+      vV = normalize(cameraPosition - wp.xyz); vY = uv.y; gl_Position = projectionMatrix * viewMatrix * wp; }`,
+  fragmentShader: `uniform vec3 uColor; uniform float uI; varying vec3 vN; varying vec3 vV; varying float vY;
+    void main() { float f = abs(dot(normalize(vN), normalize(vV))); float a = pow(f, 2.5) * smoothstep(0.0, 0.85, vY) * uI;
+      gl_FragColor = vec4(uColor * a, 1.0); }`,
+};
+const pointShader = {
+  uniforms: { uColor: { value: new THREE.Color() }, uSize: { value: 0.02 }, uScale: { value: 800 } },
+  vertexShader: `attribute float alpha; uniform float uSize; uniform float uScale; varying float vA;
+    void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv;
+      gl_PointSize = clamp(uSize * uScale / max(-mv.z, 0.05), 1.0, 48.0); vA = alpha; }`,
+  fragmentShader: `uniform vec3 uColor; varying float vA;
+    void main() { vec2 d = gl_PointCoord - 0.5; float r = 1.0 - dot(d, d) * 4.0; if (r <= 0.0) discard; gl_FragColor = vec4(uColor, r * r * vA); }`,
+};
+const gradeShader = {
+  uniforms: { tDiffuse: { value: null }, uVig: { value: 0.45 }, uAspect: { value: 16 / 9 }, uExposure: { value: 1 } },
+  vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uVig; uniform float uAspect; uniform float uExposure; varying vec2 vUv;
+    void main() { vec4 c = texture2D(tDiffuse, vUv); vec2 d = (vUv - 0.5) * vec2(uAspect, 1.0);
+      float r = length(d) / length(vec2(uAspect, 1.0) * 0.5);
+      c.rgb *= 1.0 - uVig * smoothstep(0.35, 1.0, r);
+      float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+      c.rgb *= mix(vec3(0.93, 1.03, 1.0), vec3(1.03, 1.0, 0.96), smoothstep(0.0, 0.4, l));
+      c.rgb += vec3(0.0015, 0.004, 0.003);
+      gl_FragColor = vec4(c.rgb * uExposure, c.a); }`,
+};
+
+// ---------- world ----------
+let MAT = {}, studio, match, lanePanels = [], laneLights = [], shafts = [], key, hemi, machines = [], racketRig, stringsMesh;
+let ballPool = [], blobPool = [], markPool = [], dustPool = [], targets = [], restBalls = [];
+let BALLS = [], MARKS = [], DUSTS = [];
+
+function flat(w, d, mat) { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat); m.rotation.x = -Math.PI / 2; return m; }
+function addLine(group, x0, z0, x1, z1, w, y = 0.0025) {
+  const len = Math.hypot(x1 - x0, z1 - z0), m = flat(len, w, MAT.line);
+  m.position.set((x0 + x1) / 2, y, (z0 + z1) / 2); m.rotation.z = -Math.atan2(z1 - z0, x1 - x0);
+  m.receiveShadow = true; group.add(m);
+}
+function net(width, sag = 0.156) {
+  const hgt = (x) => 1.07 - sag * (1 - (2 * x / width) ** 2);
+  const g = new THREE.Group(), geo = new THREE.PlaneGeometry(width, 1.0, 40, 4), pos = geo.attributes.position;
+  for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), top = pos.getY(i) + 0.5; pos.setY(i, 0.03 + top * (hgt(x) - 0.03)); }
+  geo.computeVertexNormals();
+  const alpha = netTexture(); alpha.repeat.set(width / 0.045, 1.0 / 0.045);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: "#1A211D", roughness: 0.9, alphaMap: alpha, transparent: true, side: THREE.DoubleSide, depthWrite: false }));
+  g.add(mesh);
+  const tapeCurve = new THREE.CatmullRomCurve3([-1, -0.5, 0, 0.5, 1].map((u) => v3(u * width / 2, hgt(u * width / 2), 0)));
+  const tape = new THREE.Mesh(new THREE.TubeGeometry(tapeCurve, 40, 0.025, 6), new THREE.MeshStandardMaterial({ color: S.line, roughness: 0.6 }));
+  tape.castShadow = true; g.add(tape);
+  for (const s of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 1.1, 16), MAT.post);
+    post.position.set(s * (width / 2 + 0.05), 0.55, 0); post.castShadow = true; g.add(post);
+  }
+  return g;
+}
+function halfCourtLines(group, cx) {
+  const sx = 4.115;
+  addLine(group, cx - sx, NETZ, cx - sx, BASEZ, 0.05); addLine(group, cx + sx, NETZ, cx + sx, BASEZ, 0.05);
+  addLine(group, cx - sx, BASEZ, cx + sx, BASEZ, 0.1); addLine(group, cx - sx, SERVEZ, cx + sx, SERVEZ, 0.05);
+  addLine(group, cx, NETZ, cx, SERVEZ, 0.05); addLine(group, cx, BASEZ - 0.1, cx, BASEZ, 0.05);
+}
+function machine(lane) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.52, 0.82, 4, 0.06), MAT.machine);
+  body.position.y = 0.36; body.castShadow = body.receiveShadow = true; g.add(body);
+  const band = new THREE.Mesh(new THREE.BoxGeometry(0.626, 0.035, 0.826), MAT.cream); band.position.y = 0.5; g.add(band);
+  const hopper = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.36, 0.38, 4, 1, true), MAT.hopper);
+  hopper.rotation.y = Math.PI / 4; hopper.position.set(0, 0.81, -0.06); hopper.castShadow = true; g.add(hopper);
+  const rand = seeded(100 + lane), inst = new THREE.InstancedMesh(MAT.ballGeo, MAT.ball, 34), mtx = new THREE.Matrix4(), q = new THREE.Quaternion();
+  for (let k = 0; k < 34; k++) {
+    const layer = Math.floor(k / 12), r = 0.27 + 0.07 * layer;
+    q.setFromEuler(new THREE.Euler(rand() * 6, rand() * 6, rand() * 6));
+    mtx.compose(v3((rand() - 0.5) * 2 * r * 0.8, 0.68 + layer * 0.062 + rand() * 0.02, -0.06 + (rand() - 0.5) * 2 * r * 0.8), q, v3(1, 1, 1));
+    inst.setMatrixAt(k, mtx);
+  }
+  inst.castShadow = true; g.add(inst);
+  const aim = new THREE.Group(); aim.position.set(0, 0.6, 0.36); g.add(aim);
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.065, 0.36, 24, 1, true), MAT.dark);
+  tube.rotation.x = Math.PI / 2; tube.position.z = 0.16; aim.add(tube);
+  const lip = new THREE.Mesh(new THREE.TorusGeometry(0.058, 0.012, 10, 32), MAT.cream); lip.position.z = 0.34; aim.add(lip);
+  const housing = new THREE.Mesh(new RoundedBoxGeometry(0.3, 0.16, 0.2, 3, 0.03), MAT.dark); housing.position.z = 0.0; aim.add(housing);
+  for (const s of [-1, 1]) for (const z of [-0.3, 0.3]) {
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.05, 20), MAT.dark);
+    wheel.rotation.z = Math.PI / 2; wheel.position.set(s * 0.33, 0.07, z); g.add(wheel);
+  }
+  g.position.set(LX[lane], 0, MACHZ);
+  g.userData.aim = aim; g.userData.body = body;
+  return g;
+}
+function racket() {
+  const g = new THREE.Group(), ax = 0.172, ay = 0.132;
+  const pts = []; for (let k = 0; k < 72; k++) { const a = k / 72 * Math.PI * 2; pts.push(v3(ax * Math.cos(a), ay * Math.sin(a), 0)); }
+  const frame = new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts, true), 200, 0.0105, 12, true), MAT.frame);
+  frame.castShadow = true; g.add(frame);
+  const pin = []; for (let k = 0; k < 72; k++) { const a = k / 72 * Math.PI * 2; pin.push(v3((ax + 0.0005) * Math.cos(a), (ay + 0.0005) * Math.sin(a), 0.0098)); }
+  g.add(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pin, true), 200, 0.0022, 6, true), MAT.cream));
+  for (const s of [-1, 1]) {
+    const a = Math.PI + s * 0.42, p0 = v3(ax * Math.cos(a), ay * Math.sin(a), 0);
+    const curve = new THREE.CatmullRomCurve3([p0, v3(-0.24, s * 0.03, 0), v3(-0.3, 0, 0)]);
+    const th = new THREE.Mesh(new THREE.TubeGeometry(curve, 30, 0.0095, 10), MAT.frame); th.castShadow = true; g.add(th);
+  }
+  const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.0125, 0.07, 16), MAT.frame);
+  shaft.rotation.z = Math.PI / 2; shaft.position.x = -0.335; g.add(shaft);
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.0165, 0.0175, 0.2, 8), MAT.grip);
+  grip.rotation.z = Math.PI / 2; grip.position.x = -0.47; grip.castShadow = true; g.add(grip);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.019, 0.019, 0.014, 16), MAT.frame);
+  cap.rotation.z = Math.PI / 2; cap.position.x = -0.575; g.add(cap);
+  const strings = new THREE.Mesh(new THREE.PlaneGeometry(2 * ax, 2 * ay), new THREE.MeshStandardMaterial({ color: S.line, roughness: 0.45, alphaMap: stringTexture(ax, ay), alphaTest: 0.5, side: THREE.DoubleSide }));
+  strings.castShadow = true; g.add(strings);
+  return { g, strings };
+}
+function shaftMesh(x, z, len) {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 2.6, 7.6, 32, 1, true),
+    new THREE.ShaderMaterial({ ...shaftShader, uniforms: THREE.UniformsUtils.clone(shaftShader.uniforms), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  m.material.uniforms.uColor.value.set(S.light_warm);
+  m.position.set(x, 8.45 - 3.8, z); m.scale.set(1, 1, len / 5.2);
+  return m;
+}
+function points(count, color, size) {
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+  geo.setAttribute("alpha", new THREE.BufferAttribute(new Float32Array(count), 1));
+  const mat = new THREE.ShaderMaterial({ ...pointShader, uniforms: THREE.UniformsUtils.clone(pointShader.uniforms), transparent: true, depthWrite: false });
+  mat.uniforms.uColor.value.set(color); mat.uniforms.uSize.value = size;
+  const p = new THREE.Points(geo, mat); p.frustumCulled = false;
+  const rand = seeded(500 + count + Math.round(size * 1e4)), seeds = [];
+  for (let k = 0; k < count; k++) seeds.push([rand(), rand(), rand(), rand()]);
+  p.userData.seeds = seeds;
+  return p;
+}
+
+function build() {
+  RectAreaLightUniformsLib.init();
+  const cv = document.getElementById("gl"); cv.width = W; cv.height = H;
+  renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: false, preserveDrawingBuffer: true, powerPreference: "high-performance" });
+  renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+  renderer.toneMapping = THREE.AgXToneMapping; renderer.toneMappingExposure = 1.25;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(S.ink);
+  scene.fog = new THREE.FogExp2(new THREE.Color(S.ink), 0.011);
+  const pm = new THREE.PMREMGenerator(renderer);
+  scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture; scene.environmentIntensity = 0.12;
+  camera = new THREE.PerspectiveCamera(34, W / H, 0.05, 140);
+
+  const clay = clayTextures();
+  MAT.clay = new THREE.MeshStandardMaterial({ color: "#ffffff", map: clay.map, bumpMap: clay.bump, bumpScale: 1.6, roughness: 0.93, metalness: 0 });
+  MAT.line = new THREE.MeshStandardMaterial({ color: "#D6D0C2", map: lineTexture(), roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+  MAT.wall = new THREE.MeshStandardMaterial({ color: "#ffffff", map: fabricTexture(S.green, 3), roughness: 0.95 });
+  MAT.wallDeep = new THREE.MeshStandardMaterial({ color: "#ffffff", map: fabricTexture(S.green_deep, 4), roughness: 0.95 });
+  MAT.theWall = new THREE.MeshStandardMaterial({ color: S.green_mid, roughness: 0.82 });
+  MAT.curtain = new THREE.MeshStandardMaterial({ color: S.green_deep, roughness: 0.95, transparent: true, opacity: 0.86, side: THREE.DoubleSide, depthWrite: false });
+  MAT.ceiling = new THREE.MeshStandardMaterial({ color: "#0B1410", roughness: 1 });
+  MAT.post = new THREE.MeshStandardMaterial({ color: S.green, roughness: 0.4, metalness: 0.5 });
+  MAT.machine = new THREE.MeshPhysicalMaterial({ color: S.green, roughness: 0.38, metalness: 0.2, clearcoat: 0.7, clearcoatRoughness: 0.25 });
+  MAT.dark = new THREE.MeshStandardMaterial({ color: "#151917", roughness: 0.55, metalness: 0.5 });
+  MAT.hopper = new THREE.MeshStandardMaterial({ color: "#1E2622", roughness: 0.5, metalness: 0.6, side: THREE.DoubleSide });
+  MAT.cream = new THREE.MeshStandardMaterial({ color: S.cream, roughness: 0.5 });
+  MAT.frame = new THREE.MeshPhysicalMaterial({ color: "#141B18", roughness: 0.3, metalness: 0.3, clearcoat: 1, clearcoatRoughness: 0.1 });
+  MAT.grip = new THREE.MeshStandardMaterial({ map: gripTexture(), roughness: 0.85 });
+  MAT.ball = new THREE.MeshPhysicalMaterial({ map: ballTexture(), roughness: 0.95, sheen: 1, sheenRoughness: 0.55, sheenColor: new THREE.Color(S.ball).multiplyScalar(1.1) });
+  MAT.ballGeo = new THREE.SphereGeometry(RB, 40, 24);
+  MAT.target = new THREE.MeshStandardMaterial({ color: "#BDB6A8", roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+
+  // --- the studio ---
+  studio = new THREE.Group(); scene.add(studio);
+  const floor = flat(60, 40, MAT.clay); floor.position.set(4.75, 0, -1); floor.receiveShadow = true;
+  clay.map.repeat.set(60 / 5, 40 / 5); clay.bump.repeat.set(60 / 5, 40 / 5); studio.add(floor);
+  for (let i = 0; i < 4; i++) {
+    halfCourtLines(studio, LX[i]);
+    const n = net(LANE_W - 0.4); n.position.set(LX[i], 0, NETZ); studio.add(n);
+    const m = machine(i); studio.add(m); machines.push(m);
+  }
+  for (let i = 0; i < 4; i++) {          // divider curtains between bays
+    const x = LX[i] + LANE_W / 2, cur = new THREE.Mesh(new THREE.PlaneGeometry(26, 4.2), MAT.curtain);
+    cur.rotation.y = Math.PI / 2; cur.position.set(x, 2.1, -1); studio.add(cur);
+  }
+  const theWall = new THREE.Mesh(new THREE.BoxGeometry(LANE_W - 0.2, 4.2, 0.3), MAT.theWall);
+  theWall.position.set(WB, 2.1, WALLZ - 0.15); theWall.receiveShadow = true; theWall.castShadow = true; studio.add(theWall);
+  const wallLine = new THREE.Mesh(new THREE.BoxGeometry(LANE_W - 0.2, 0.06, 0.02), MAT.line); wallLine.position.set(WB, 0.914, WALLZ + 0.01); studio.add(wallLine);
+  addLine(studio, WB - 4.115, WALLZ, WB - 4.115, BASEZ, 0.05); addLine(studio, WB + 4.115, WALLZ, WB + 4.115, BASEZ, 0.05);
+  addLine(studio, WB - 4.115, WALLZ + 5.5, WB + 4.115, WALLZ + 5.5, 0.05);
+  const walls = [[4.75, 4.25, -16, 48, 8.5, 0], [4.75, 4.25, 14, 48, 8.5, Math.PI], [-19.25, 4.25, -1, 30, 8.5, Math.PI / 2], [28.75, 4.25, -1, 30, 8.5, -Math.PI / 2]];
+  for (const [x, y, z, w, h, r] of walls) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), MAT.wall); m.position.set(x, y, z); m.rotation.y = r; m.receiveShadow = true;
+    m.material.map.repeat.set(w / 3, h / 3); studio.add(m);
+    const stripe = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.05), MAT.cream); stripe.position.set(x, 2.9, z); stripe.rotation.y = r;
+    stripe.translateZ(0.01); studio.add(stripe);
+  }
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(48, 30), MAT.ceiling); ceil.rotation.x = Math.PI / 2; ceil.position.set(4.75, 8.5, -1); studio.add(ceil);
+  // Overhead light: three emissive segments per bay, one rect-area light per bay, and a haze shaft.
+  const bays = [...LX, WB];
+  bays.forEach((x, i) => {
+    const segs = [];
+    for (let s = 0; s < 3; s++) {
+      const z = -6.2 + s * 4.6, mat = new THREE.MeshBasicMaterial({ color: "#000000" });
+      for (const dx of [-1.1, 1.1]) {
+        const p = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 4.0), mat); p.position.set(x + dx, 8.38, z); studio.add(p);
+      }
+      segs.push(mat);
+    }
+    lanePanels.push(segs);
+    const light = new THREE.RectAreaLight(S.light_warm, 0, 3.0, 13.0);
+    scene.add(light); laneLights.push(light);
+    const sh = shaftMesh(x, -1.6, 13); studio.add(sh); shafts.push(sh);
+  });
+  // Target spots painted for the lane-3 drill and the lane-2 session target.
+  for (const p of TARGETS_C()) { const r = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.47, 64), MAT.target); r.rotation.x = -Math.PI / 2; r.position.set(p.x, 0.003, p.z); studio.add(r); targets.push(r); }
+  { const p = TARGET_E(), r = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.555, 72), MAT.target); r.rotation.x = -Math.PI / 2; r.position.set(p.x, 0.003, p.z); studio.add(r);
+    const dot = new THREE.Mesh(new THREE.CircleGeometry(0.06, 32), MAT.target); dot.rotation.x = -Math.PI / 2; dot.position.set(p.x, 0.003, p.z); studio.add(dot); }
+
+  // --- the match court ---
+  match = new THREE.Group(); scene.add(match);
+  const mfloor = flat(40, 46, MAT.clay.clone()); mfloor.material.map = clay.map.clone(); mfloor.material.bumpMap = clay.bump.clone();
+  mfloor.material.map.repeat.set(8, 9.2); mfloor.material.bumpMap.repeat.set(8, 9.2); mfloor.material.map.needsUpdate = true;
+  mfloor.position.copy(M); mfloor.receiveShadow = true; match.add(mfloor);
+  { const hx = 5.485, sx = 4.115, hz = 11.885, x = M.x, z = M.z;
+    for (const s of [-1, 1]) { addLine(match, x + s * hx, z - hz, x + s * hx, z + hz, 0.05); addLine(match, x + s * sx, z - hz, x + s * sx, z + hz, 0.05);
+      addLine(match, x - hx, z + s * hz, x + hx, z + s * hz, 0.1); addLine(match, x - sx, z + s * 6.4, x + sx, z + s * 6.4, 0.05);
+      addLine(match, x, z + s * (hz - 0.1), x, z + s * hz, 0.05); }
+    addLine(match, x, z - 6.4, x, z + 6.4, 0.05);
+    const n = net(12.8, 0.09); n.position.copy(M); match.add(n); }
+  for (const [dx, dz, w, r] of [[0, -18.4, 40, 0], [0, 18.4, 40, Math.PI], [-10.5, 0, 46, Math.PI / 2], [10.5, 0, 46, -Math.PI / 2]]) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(w, 4.0), MAT.wallDeep); m.position.set(M.x + dx, 2.0, M.z + dz); m.rotation.y = r; m.receiveShadow = true; match.add(m);
+    const top = new THREE.Mesh(new THREE.PlaneGeometry(w, 0.06), MAT.cream); top.position.set(M.x + dx, 4.0, M.z + dz); top.rotation.y = r; top.translateZ(0.01); match.add(top);
+  }
+  const panelMat = new THREE.MeshBasicMaterial({ color: new THREE.Color(S.light_warm).multiplyScalar(5) });
+  for (const dx of [-7, -2.3, 2.3, 7]) for (const dz of [-12, 0, 12]) { const p = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.08, 7), panelMat); p.position.set(M.x + dx, 11, M.z + dz); match.add(p); }
+
+  // --- light rig ---
+  key = new THREE.SpotLight(S.light_warm, 0, 40, 0.62, 0.75, 1.4);
+  key.castShadow = true; key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0002; key.shadow.normalBias = 0.02; key.shadow.radius = 4;
+  key.shadow.camera.near = 1; key.shadow.camera.far = 30;
+  scene.add(key); scene.add(key.target);
+  hemi = new THREE.HemisphereLight("#FFE6CC", S.green_deep, 0.0); scene.add(hemi);
+
+  // --- props: balls, blobs, marks, dust ---
+  for (let k = 0; k < 8; k++) {
+    const b = new THREE.Mesh(MAT.ballGeo, MAT.ball); b.castShadow = true; b.visible = false; scene.add(b); ballPool.push(b);
+    const s = flat(0.16, 0.16, new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false, color: "#000000" }));
+    s.visible = false; s.material.alphaMap = s.material.map; s.material.map = null; scene.add(s); blobPool.push(s);
+  }
+  const mt = markTexture();
+  for (let k = 0; k < 28; k++) {
+    const m = flat(0.2, 0.1, new THREE.MeshStandardMaterial({ map: mt, transparent: true, depthWrite: false, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 }));
+    m.visible = false; m.receiveShadow = true; scene.add(m); markPool.push(m);
+  }
+  for (let k = 0; k < 4; k++) { const p = points(70, S.clay_light, 0.016); p.visible = false; scene.add(p); dustPool.push(p); }
+  const rr = racket(); racketRig = rr.g; stringsMesh = rr.strings; scene.add(racketRig);
+  const rnd = seeded(77);
+  for (let k = 0; k < 6; k++) {
+    const b = new THREE.Mesh(MAT.ballGeo, MAT.ball); b.castShadow = true;
+    b.position.set(L2 - 2.6 + rnd() * 5.4, RB, NETZ + 0.6 + rnd() * 1.6); b.rotation.set(rnd() * 6, rnd() * 6, rnd() * 6);
+    studio.add(b); restBalls.push(b);
+  }
+
+  // --- post ---
+  const target = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, target);
+  composer.addPass(new RenderPass(scene, camera));
+  bokeh = new BokehPass(scene, camera, { focus: 5, aperture: 0.0004, maxblur: 0.008 });
+  composer.addPass(bokeh);
+  bloom = new UnrealBloomPass(new THREE.Vector2(W, H), 0.32, 0.35, 2.2);
+  composer.addPass(bloom);
+  grade = new ShaderPass(gradeShader); grade.uniforms.uAspect.value = W / H;
+  composer.addPass(grade);
+  composer.addPass(new OutputPass());
+}
+
+// ---------- choreography: every event is a function of its cue time ----------
+// A flight from p0 at t0 to p1 at t1 under gravity: straight line plus g/2 (t - t0)(t1 - t).
+const arc = (p0, p1, t0, t1, t) => { const u = (t - t0) / (t1 - t0), p = p0.clone().lerp(p1, u); p.y += 0.5 * G * (t - t0) * (t1 - t); return p; };
+const vel = (p0, p1, t0, t1, t) => { const d = p1.clone().sub(p0).divideScalar(t1 - t0); d.y += 0.5 * G * (t1 + t0 - 2 * t); return d; };
+const TARGETS_C = () => [v3(L3 - 2.5, RB, 2.3), v3(L3 + 2.7, RB, 0.2), v3(L3 + 0.2, RB, 3.3)];
+const TARGET_E = () => v3(L2 + 1.8, 0, 1.4);
+let WARP_TABLE = null;
+const SLOW = { a: 14.5, b: 19 };
+function speedD(t) { const a = smooth((t - 15.25) / 0.5), b = smooth((t - 17.3) / 1.4); return 1 - 0.965 * a * (1 - 0.62 * b); }
+function buildWarp() {          // scene time of the slow-motion shot, tabulated once at 1/1200 s
+  const step = 1 / 1200, n = Math.ceil((SLOW.b - SLOW.a) / step) + 2; WARP_TABLE = new Float64Array(n);
+  let acc = SLOW.a; WARP_TABLE[0] = acc;
+  for (let i = 1; i < n; i++) { acc += speedD(SLOW.a + (i - 0.5) * step) * step; WARP_TABLE[i] = acc; }
+}
+function warp(t) {
+  if (t <= SLOW.a) return t;
+  const f = (t - SLOW.a) * 1200, i = Math.min(WARP_TABLE.length - 2, Math.floor(f)), u = f - i;
+  return WARP_TABLE[i] + (WARP_TABLE[i + 1] - WARP_TABLE[i]) * u;
+}
+const HERO = () => v3(L2 + 0.4, 0.95, 3.6);
+const PIVOT_R = 1.15, OMEGA = 11;
+
+function choreograph() {
+  const B = [], K = [], D = [];
+  const track = (segs, from, to, extra = {}) => B.push({ segs, from, to, ...extra });
+  const bounce = (p, t, dir, fresh = true, lane = null) => { K.push({ p, t, dir, fresh }); D.push({ p, t, dir }); };
+  // Shot A: lane 2 machine feeds one ball that bounces past the lens.
+  { const p0 = mouth(1), pa = v3(L2 + 3.1, RB, 3.0), p2 = v3(L2 + 4.3, 1.0, 9.6), t0 = C("a.fire"), t1 = C("a.bounce");
+    track([[p0, pa, t0, t1], [pa, p2, t1, t1 + 0.6]], t0, 5.0); bounce(pa, t1, Math.atan2(pa.x - p0.x, pa.z - p0.z)); }
+  // Shot B: a ball struck at The Wall, rebounds, bounces.
+  { const p0 = v3(WB - 1.2, 0.95, 1.8), pw = v3(WB + 0.2, 1.3, WALLZ + RB), pb = v3(WB + 0.7, RB, WALLZ + 4.6), p3 = v3(WB + 1.1, 0.9, WALLZ + 9.0);
+    const ts = C("wall.strike"), tw = C("wall.hit"), tb = C("wall.bounce");
+    track([[p0, pw, ts, tw], [pw, pb, tw, tb], [pb, p3, tb, tb + 0.55]], ts, 10.0); bounce(pb, tb, 0); }
+  // Shot C: the lane-3 machine feeds its three targets.
+  TARGETS_C().forEach((pt, k) => {
+    const t0 = C(`c.fire${k + 1}`), t1 = C(`c.land${k + 1}`), p0 = mouth(2), dir = pt.clone().sub(p0).setY(0).normalize();
+    const p2 = pt.clone().addScaledVector(dir, 4.2).setY(0.7);
+    track([[p0, pt, t0, t1], [pt, p2, t1, t1 + 0.5]], t0, 14.5, { lane: 2 }); bounce(pt, t1, Math.atan2(dir.x, dir.z));
+  });
+  // Shot D (scene time): bounce, then the strike. Contact point is on the string face.
+  { const P = HERO(), pc = P.clone().add(v3(0, 0, -RB - 0.004)), pb = v3(L2 + 0.3, RB, 0.55), p0 = mouth(1);
+    const tb = warp(C("d.bounce")), tc = warp(C("d.hit")), tf = tb - 0.82, tOut = tc + 0.55, pOut = v3(L2 - 0.6, 1.55, NETZ - 1.8);
+    track([[p0, pb, tf, tb], [pb, pc, tb, tc], [pc, pOut, tc, tOut]], 14.5, 19, { warped: true, contact: tc });
+    bounce(pb, C("d.bounce"), Math.atan2(pb.x - p0.x, pb.z - p0.z)); }
+  // Shot E: five balls land closer and closer to the target. Last session's marks stay in the clay all film.
+  const T = TARGET_E(), radii = [1.35, 0.98, 0.66, 0.38, 0.13], angs = [2.3, -0.7, 1.0, -2.2, 0.5];
+  radii.forEach((r, k) => {
+    const t1 = C(`e.land${k + 1}`), t0 = t1 - 0.88, p0 = mouth(1), pt = v3(T.x + r * Math.cos(angs[k]), RB, T.z + r * Math.sin(angs[k]));
+    const dir = pt.clone().sub(p0).setY(0).normalize(), p2 = pt.clone().addScaledVector(dir, 4.6).setY(0.75);
+    track([[p0, pt, t0, t1], [pt, p2, t1, t1 + 0.5]], 19.0, 23.5); bounce(pt, t1, Math.atan2(dir.x, dir.z));
+  });
+  const rand = seeded(61);
+  for (let k = 0; k < 11; k++) {
+    const r = 1.0 + rand() * 1.7, a = rand() * Math.PI * 2, p = v3(T.x + r * Math.cos(a), RB, T.z + r * Math.sin(a));
+    K.push({ p, t: -1, dir: (rand() - 0.5) * 0.5, fresh: false });
+  }
+  // Shot F: a rally ball bounces, is struck back across the net and lands deep.
+  { const pIn0 = v3(M.x - 1.6, 1.0, M.z - 12.2), pIn = v3(M.x + 2.1, RB, M.z + 8.7), pHit = v3(M.x + 2.5, 0.95, M.z + 12.1),
+      pB = v3(M.x - 2.4, RB, M.z - 7.9), pEnd = v3(M.x - 3.3, 1.0, M.z - 14.6);
+    const ti = C("f.in"), th = C("f.hit"), tb = C("f.bounce");
+    track([[pIn0, pIn, ti - 1.0, ti], [pIn, pHit, ti, th], [pHit, pB, th, tb], [pB, pEnd, tb, tb + 0.6]], 23.5, 27.5);
+    bounce(pIn, ti, Math.atan2(pIn.x - pIn0.x, pIn.z - pIn0.z)); bounce(pB, tb, Math.atan2(pB.x - pHit.x, pB.z - pHit.z)); }
+  BALLS = B; MARKS = K; DUSTS = D;
+}
+function ballAt(tr, t) {
+  const s = tr.warped ? warp(t) : t;
+  for (const [p0, p1, t0, t1] of tr.segs) if (s >= t0 && s <= t1) return { p: arc(p0, p1, t0, t1, s), v: vel(p0, p1, t0, t1, s), s };
+  return null;
+}
+
+// ---------- camera ----------
+const hfovScale = 0.62;
+function fovFor(f) {
+  if (!PORTRAIT) return f;
+  const hf = 2 * Math.atan(Math.tan(f * Math.PI / 360) * 16 / 9) * hfovScale;
+  return 2 * Math.atan(Math.tan(hf / 2) * H / W) * 180 / Math.PI;
+}
+const bez = (a, b, c, u) => a.clone().multiplyScalar((1 - u) ** 2).addScaledVector(b, 2 * u * (1 - u)).addScaledVector(c, u * u);
+function shotA(t) {
+  const u = clamp(t / 5), w = u * 0.55 + 0.45 * u * (2 - u);
+  const pos = v3(L2 + 3.75, 0.13, 8.4).lerp(v3(L2 + 3.15, 0.34, 4.9), w);
+  const look = v3(L2 + 1.6, 0.42, -7).lerp(v3(L2 + 0.8, 0.62, -7), u);
+  return { pos, look, fov: 30, focus: pos.distanceTo(v3(L2 + 3.1, 0.2, 3.0)), aperture: 0.0009, maxblur: 0.009 };
+}
+function shotB(t) {
+  const a = shotA(5), u = ease((t - 5) / 5);
+  const pos = bez(a.pos, v3(L2 + 3.0, 2.8, 10.6), v3(-15.2, 7.1, 11.6), u);
+  const look = a.look.clone().lerp(v3(8.5, 0.2, -6.0), smooth((t - 5) / 4.4));
+  return { pos, look, fov: lerp(30, 44, u), focus: lerp(a.focus, 24, u), aperture: lerp(0.0009, 0.00012, u), maxblur: 0.008 };
+}
+function shotC(t) {
+  const u = clamp((t - 10) / 4.5);
+  const pos = v3(L3 + 1.95, 1.3, -13.6).lerp(v3(L3 + 0.55, 1.8, -12.2), ease(u));
+  const look = v3(L3 - 0.8, 0.55, -4).lerp(v3(L3 - 0.1, 0.3, 0.5), ease(u));
+  if (PORTRAIT) look.x -= 0.9;
+  const near = pos.distanceTo(v3(L3, 0.6, MACHZ)), far = pos.distanceTo(v3(L3, 0, 1.5));
+  return { pos, look, fov: 36, focus: lerp(near, far, smooth((t - 10.55) / 0.7)), aperture: 0.0011, maxblur: 0.01 };
+}
+function shotD(t) {
+  // While the action runs at a few percent speed, the camera keeps orbiting in real time.
+  const P = HERO(), u = clamp((t - 14.5) / 4.5), a = lerp(-0.35, 1.25, 0.55 * clamp((t - 14.5) / 4.5) + 0.45 * smooth((t - 14.5) / 4.5));
+  const off = v3(0.8, 0.15, -0.86).applyAxisAngle(v3(0, 1, 0), a).multiplyScalar(lerp(1.08, 0.86, ease(u)));
+  const tr = BALLS.find((x) => x.contact !== undefined), pos = P.clone().add(off), b = ballAt(tr, t);
+  const look = P.clone().add(v3(0, -0.02, 0.02));
+  if (b && b.s > tr.contact) look.lerp(b.p, 0.12 * smooth((b.s - tr.contact) / 0.05));
+  return { pos, look, fov: 28, focus: pos.distanceTo(P), aperture: 0.003, maxblur: 0.012 };
+}
+function shotE(t) {
+  const T = TARGET_E(), u = clamp((t - 19) / 4.5);
+  const phi = lerp(0.7, -0.75, u), r = lerp(3.0, 1.8, u);
+  const pos = T.clone().add(v3(r * Math.sin(phi), lerp(6.0, 3.7, u), r * Math.cos(phi)));
+  return { pos, look: T.clone().add(v3(0, 0, -0.25)), fov: 40, focus: pos.distanceTo(T), aperture: 0.0007, maxblur: 0.008 };
+}
+function shotF(t) {
+  const u = clamp((t - 23.5) / 4);
+  const pos = v3(M.x - 0.4, 4.9, M.z + 18.0).lerp(v3(M.x + 0.7, 4.0, M.z + 16.6), ease(u));
+  const tr = BALLS[BALLS.length - 1], b = ballAt(tr, t), base = v3(M.x, 0.2, M.z - 1.5);
+  const look = b ? base.clone().lerp(b.p, 0.12) : base;
+  return { pos, look, fov: 38, focus: b ? pos.distanceTo(b.p) : 16, aperture: 0.0002, maxblur: 0.004 };
+}
+function shotG(t) {
+  const u = clamp((t - 27.5) / 4.5);
+  const pos = v3(L2 + 3.3, 0.40, -1.2).lerp(v3(L2 + 0.4, 0.76, -5.4), u);
+  const look = v3(L2 - 1.2, 1.2, -8).lerp(v3(L2 + 0.6, 1.1, -8), u);
+  return { pos, look, fov: 34, focus: pos.distanceTo(v3(L2 - 0.2, 0.6, NETZ)), aperture: 0.0014, maxblur: 0.01 };
+}
+const SHOTS = [[0, 5, shotA], [5, 10, shotB], [10, 14.5, shotC], [14.5, 19, shotD], [19, 23.5, shotE], [23.5, 27.5, shotF], [27.5, 32.01, shotG]];
+
+// ---------- light levels ----------
+const strike = (t, at, d = 0.18) => smooth((t - at) / d);
+function levels(t) {
+  const seg = [strike(t, C("light.a")), strike(t, C("light.b")), strike(t, C("light.c"))];
+  const lv = [strike(t, C("lane.1")), Math.max(seg[0], (seg[0] + seg[1] + seg[2]) / 3), strike(t, C("lane.3")), strike(t, C("lane.4")), strike(t, C("wall.on"))];
+  const dim = smooth((t - 27.5) / 1.8);
+  return { seg, lv: lv.map((v, i) => v * (1 - dim * (i === 1 ? 0.3 : 0.75))) };
+}
+
+// Per-shot light: bay panel level, key spot (position, target, candela, cone) and haze shafts.
+let LOOKS;
+function buildLooks() {
+  const P = HERO(), T = TARGET_E();
+  LOOKS = [
+    { rect: 5.0, key: [v3(L2 + 3.2, 7.0, 0.5), v3(L2 + 2.0, 0, -1)], I: 70, angle: 0.5, shaft: 0.012 },
+    { rect: 11.0, key: [v3(L3, 7.8, 0), v3(L2 + 4, 0, -3)], I: 30, angle: 0.7, shaft: 0.0 },
+    { rect: 6.0, key: [v3(L3 + 3.2, 4.8, -12.2), v3(L3, 0.5, -10.4)], I: 60, angle: 0.4, shaft: 0.006 },
+    { rect: 0.8, key: [P.clone().add(v3(-0.7, 3.2, 2.8)), P], I: 42, angle: 0.3, shaft: 0 },
+    { rect: 3.0, key: [T.clone().add(v3(-5.6, 2.1, 0.8)), T], I: 110, angle: 0.5, shaft: 0 },
+    { rect: 7.0, key: [v3(M.x + 7, 10, M.z + 9), M.clone()], I: 260, angle: 0.8, shaft: 0 },
+    { rect: 3.2, key: [v3(L2 + 1.2, 6.5, -4.0), v3(L2, 0.5, NETZ)], I: 50, angle: 0.45, shaft: 0.01 },
+  ];
+}
+
+// ---------- seek ----------
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion();
+function placeRacket(s, tc) {
+  const P = HERO(), Q = P.clone().add(v3(-PIVOT_R, 0, 0));
+  const d = s - tc;
+  const phi = d < 0 ? 2.7 * Math.tanh(-OMEGA * d / 2.7) : -2.1 * (1 - Math.exp(-OMEGA * d / 2.1));
+  const radial = v3(Math.cos(phi), 0, Math.sin(phi));
+  const head = Q.clone().addScaledVector(radial, PIVOT_R); head.y = P.y - 0.32 * phi;
+  const motion = v3(Math.sin(phi), 0, -Math.cos(phi)), x = radial.clone().add(v3(0, -0.12, 0)).normalize();
+  const z = motion.clone().addScaledVector(x, -motion.dot(x)).normalize(), y = z.clone().cross(x);
+  _m.makeBasis(x, y, z); racketRig.quaternion.setFromRotationMatrix(_m); racketRig.position.copy(head);
+  const w = Math.exp(-(((s - tc) / 0.008) ** 2));
+  stringsMesh.position.z = -0.014 * w;
+  return { w, z };
+}
+function setDust(p, ev, t, life, spread, rise) {
+  const age = t - ev.t, pos = p.geometry.attributes.position, al = p.geometry.attributes.alpha, seeds = p.userData.seeds;
+  for (let k = 0; k < seeds.length; k++) {
+    const [a, b, c, d] = seeds[k], ang = ev.dir + Math.PI + (a - 0.5) * 2.4 + (k % 3 === 0 ? Math.PI : 0) * 0.35;
+    const sp = spread * (0.3 + b), drag = 1 - Math.exp(-age * 4.0);
+    const x = ev.p.x + Math.sin(ang) * sp * drag / 4.0, z = ev.p.z + Math.cos(ang) * sp * drag / 4.0;
+    const y = Math.max(0.002, (rise * (0.2 + c)) * drag / 4.0 - 0.6 * age * age);
+    pos.setXYZ(k, x, y, z);
+    al.setX(k, clamp(1 - age / (life * (0.5 + 0.5 * d))) ** 1.5 * 0.85);
+  }
+  pos.needsUpdate = true; al.needsUpdate = true; p.visible = true;
+}
+function seek(t) {
+  const shot = SHOTS.find(([a, b]) => t >= a && t < b) || SHOTS[SHOTS.length - 1];
+  const cam = shot[2](t), id = SHOTS.indexOf(shot);
+  camera.up.copy(cam.up || v3(0, 1, 0));
+  camera.position.copy(cam.pos); camera.fov = fovFor(cam.fov); camera.updateProjectionMatrix();
+  camera.lookAt(cam.look); camera.updateMatrixWorld();
+  const inMatch = id === 5;
+  studio.visible = !inMatch; match.visible = inMatch;
+
+  // Lights
+  const { seg, lv } = levels(t), warm = new THREE.Color(S.light_warm);
+  const bays = [...LX, WB];
+  const LK = LOOKS[id], dimEnd = id === 6 ? lerp(1, 0.75, smooth((t - 27.5) / 1.8)) : 1;
+  laneLights.forEach((L, i) => {
+    if (inMatch) { L.position.set(M.x + [-7, -2.3, 2.3, 7, 0][i], 10.9, M.z + (i === 4 ? 12 : 0)); L.width = 1.6; L.height = i === 4 ? 7 : 22; L.intensity = LK.rect; }
+    else if (i === 1) {
+      // Lane 2's pool grows with its segments, far end first.
+      const n = seg[0] + seg[1] + seg[2], len = Math.max(0.5, 4.6 * n);
+      L.position.set(bays[i], 8.3, -8.5 + len / 2); L.width = 3.0; L.height = len; L.intensity = LK.rect * Math.min(1, n);
+    } else { L.position.set(bays[i], 8.3, -1.6); L.width = 3.0; L.height = 13.0; L.intensity = LK.rect * lv[i]; }
+    L.rotation.set(-Math.PI / 2, 0, 0);
+    lanePanels[i].forEach((mat, s) => mat.color.copy(warm).multiplyScalar(6.5 * (i === 1 ? seg[2 - s] : lv[i]) * dimEnd));
+    shafts[i].material.uniforms.uI.value = LK.shaft * lv[i];
+  });
+  hemi.intensity = inMatch ? 0.3 : 0.12 * Math.max(...lv);
+  scene.environmentIntensity = inMatch ? 0.14 : 0.12 * Math.max(...lv);
+  key.position.copy(LK.key[0]); key.target.position.copy(LK.key[1]); key.target.updateMatrixWorld();
+  if (id === 6) key.position.x = lerp(L2 - 2.5, L2 + 4.0, clamp((t - 27.5) / 4.5));
+  key.angle = LK.angle; key.intensity = LK.I * (id === 0 ? lv[1] : 1) * dimEnd;
+
+  // Machines: the lane-3 head re-aims at each target before it fires; every machine recoils when it fires.
+  machines.forEach((m, i) => {
+    let yaw = 0, pitch = -0.22, kick = 0;
+    for (const tr of BALLS) {
+      if (tr.warped || tr.segs[0][0].distanceTo(mouth(i)) > 0.01) continue;
+      const [p0, p1, t0, t1] = tr.segs[0], v = vel(p0, p1, t0, t1, t0);
+      const w = smooth((t - (t0 - 0.75)) / 0.55);
+      if (w > 0) { yaw = lerp(yaw, Math.atan2(v.x, v.z), w); pitch = lerp(pitch, -Math.atan2(v.y, Math.hypot(v.x, v.z)), w); }
+      if (t >= t0) kick += Math.exp(-(t - t0) / 0.07) * smooth((t - t0) / 0.02);
+    }
+    m.userData.aim.rotation.set(pitch, yaw, 0, "YXZ");
+    m.userData.body.position.z = -0.012 * kick;
+    m.userData.aim.position.z = 0.36 - 0.03 * kick;
+  });
+
+  // Balls
+  ballPool.forEach((b) => (b.visible = false)); blobPool.forEach((s) => (s.visible = false));
+  let k = 0, contact = null;
+  for (const tr of BALLS) {
+    if (t < tr.from || t >= tr.to || k >= ballPool.length) continue;
+    const st = ballAt(tr, t); if (!st) continue;
+    const b = ballPool[k], s = blobPool[k]; k++;
+    b.position.copy(st.p); b.visible = true;
+    const sp = st.v.length(), axis = v3(st.v.z, 0, -st.v.x).normalize();
+    _q.setFromAxisAngle(axis.lengthSq() > 0 ? axis : v3(1, 0, 0), (st.s * 40) % (Math.PI * 2));
+    b.quaternion.copy(_q); b.scale.set(1, 1, 1);
+    if (tr.contact !== undefined) {
+      const r = placeRacket(st.s, tr.contact); contact = { s: st.s, tc: tr.contact, w: r.w };
+      if (r.w > 0.01) {
+        const n = r.z, sq = 0.34 * r.w;
+        _m.lookAt(v3(0, 0, 0), n, v3(0, 1, 0)); const qq = new THREE.Quaternion().setFromRotationMatrix(_m);
+        b.quaternion.copy(qq); b.scale.set(1 + 0.16 * r.w, 1 + 0.16 * r.w, 1 - sq);
+      }
+    }
+    const h = st.p.y;
+    s.position.set(st.p.x, 0.004, st.p.z); s.scale.setScalar(1 + h * 1.4); s.material.opacity = 0.75 * Math.exp(-h / 0.7); s.visible = true;
+  }
+  racketRig.visible = id === 3;
+  if (id === 3 && !contact) placeRacket(warp(t), warp(C("d.hit")));
+
+  // Marks: present from their bounce on (old ones always), fading in over 70 ms.
+  markPool.forEach((m) => (m.visible = false));
+  let mk = 0;
+  for (const ev of MARKS) {
+    const on = ev.fresh ? smooth((t - ev.t) / 0.07) : 1;
+    if (on <= 0 || mk >= markPool.length) continue;
+    const m = markPool[mk++];
+    m.position.set(ev.p.x, 0.0035, ev.p.z); m.rotation.set(-Math.PI / 2, 0, ev.dir + Math.PI / 2);
+    m.scale.set(ev.fresh ? 1.15 : 0.9, ev.fresh ? 1.15 : 1.0, 1);
+    m.material.opacity = (ev.fresh ? 1 : 0.32) * on; m.material.color.set(ev.fresh ? "#8a7f78" : "#ffffff"); m.visible = true;
+  }
+  // Clay dust at each bounce.
+  dustPool.forEach((p) => (p.visible = false));
+  let dk = 0;
+  for (const ev of DUSTS) {
+    if (t < ev.t || t > ev.t + 1.3 || dk >= dustPool.length) continue;
+    setDust(dustPool[dk++], ev, t, 1.2, 1.2, 1.3);
+  }
+  dustPool.forEach((p) => (p.material.uniforms.uScale.value = H / (2 * Math.tan(camera.fov * Math.PI / 360))));
+  // The closing shot's ball rolls to rest near the net.
+  restBalls.forEach((b) => (b.visible = id >= 4 && !inMatch));
+  if (id === 6) {
+    const tau = t - 27.5, kRoll = 0.85, x = L2 + 1.9 - 1.7 * (1 - Math.exp(-kRoll * tau)), b = ballPool[0];
+    b.visible = true; b.position.set(x, RB, NETZ + 1.9); b.scale.set(1, 1, 1);
+    b.quaternion.setFromAxisAngle(v3(0, 0, 1), (L2 + 1.9 - x) / RB);
+    blobPool[0].position.set(x, 0.004, NETZ + 1.9); blobPool[0].scale.setScalar(1); blobPool[0].material.opacity = 0.75; blobPool[0].visible = true;
+  }
+
+  // Lens and grade
+  bloom.strength = id === 1 ? 0.1 : 0.3;
+  bokeh.uniforms.focus.value = cam.focus; bokeh.uniforms.aperture.value = cam.aperture; bokeh.uniforms.maxblur.value = cam.maxblur;
+  grade.uniforms.uExposure.value = smooth(t / 0.45) * (id === 6 ? lerp(1, 0.8, smooth((t - 27.5) / 2)) : 1);
+  composer.render();
+  text(t);
+}
+
+// ---------- typography ----------
+let TX = {};
+function buildText() {
+  const dom = document.getElementById("dom");
+  if (PORTRAIT) document.getElementById("stage").classList.add("portrait");
+  const block = (id, kick, head, extra = []) => {
+    const b = el(dom, "block", undefined, `${id}.block`);
+    const k = el(b, "kick", undefined, `${id}.kick`), rule = document.createElement("span"); rule.className = "rule"; k.appendChild(rule);
+    const kt = document.createElement("span"); kt.textContent = kick; k.appendChild(kt);
+    const h = el(b, "head", undefined, `${id}.head`), words = maskedWords(h, head);
+    const parts = extra.map(([cls, text, eid]) => el(b, cls, text, eid));
+    return { b, k, rule, h, words, parts };
+  };
+  TX.a = block("a", "A TENNIS LAB · SEATTLE", "Practice with intent.");
+  TX.b = block("b", "THE STUDIO", "Four lanes. One wall.", [["sub", "Four half-court training lanes, plus The Wall.", "b.sub"]]);
+  TX.c = block("c", "THE SETUP", "Programmable ball machines.", [["head", "", "c.head2"]]);
+  TX.c.words2 = maskedWords(TX.c.parts[0], "Human coaching.");
+  TX.d = block("d", "THE WORK", "Rigorous, focused practice.");
+  TX.e = block("e", "SESSION TO SESSION", "Pick up where you left off.", [["zh", "下次接着练", "e.zh"]]);
+  TX.f = block("f", "ON COURT", "Progress you take into matches.");
+  for (const key of "abcdef") {
+    const s = TX[key].b.style;
+    if (PORTRAIT) { s.left = "84px"; s.top = "236px"; s.width = `${W - 168}px`; }
+    else { s.left = "132px"; s.bottom = "112px"; s.width = "1620px"; }
+  }
+  TX.labels = ["LANE 1", "LANE 2", "LANE 3", "LANE 4", "THE WALL"].map((txt, i) => el(dom, "label", txt, `b.lab${i}`));
+  const card = el(dom, "card", undefined, "g.card");
+  TX.g = { card, kick: el(card, "kick", "OPENING SOON", "g.kick"), word: el(card, "word-mark", undefined, "g.word"),
+           sub: el(card, "sub", "Indoor tennis training studio · Seattle", "g.sub"), cta: el(card, "cta", "Join the waitlist", "g.cta"), url: el(card, "url", "atennislab.com", "g.url") };
+  TX.g.words = maskedWords(TX.g.word, "A Tennis Lab");
+  card.style.top = PORTRAIT ? "640px" : "250px";
+  const scrim = document.getElementById("scrim"), deep = rgb(S.green_deep).join(",");
+  TX.scrims = {
+    side: PORTRAIT ? `linear-gradient(180deg, rgba(${deep},0.9) 0%, rgba(${deep},0.62) 30%, rgba(${deep},0) 52%)`
+                   : `linear-gradient(90deg, rgba(${deep},0.72) 0%, rgba(${deep},0.38) 30%, rgba(${deep},0) 50%), linear-gradient(0deg, rgba(${deep},0.6) 0%, rgba(${deep},0.25) 25%, rgba(${deep},0) 45%)`,
+    card: `radial-gradient(ellipse 70% 62% at 50% ${PORTRAIT ? 47 : 50}%, rgba(${deep},0.86) 0%, rgba(${deep},0.55) 55%, rgba(${deep},0.0) 100%)`,
+  };
+  TX.scrimEl = scrim;
+}
+// Block timing: [kicker in, headline in, extras in..., out start]. Out completes 0.35 s later.
+const BLOCKS = { a: [1.0, 1.5, [], 4.45], b: [5.35, 5.6, [6.25], 9.45], c: [10.25, 10.45, [11.55], 13.95], d: [16.05, 16.25, [], 18.45],
+                 e: [19.3, 19.5, [20.55], 22.95], f: [23.75, 23.95, [], 26.95] };
+function text(t) {
+  let scrim = 0, scrimKind = "side";
+  for (const key of "abcdef") {
+    const [kin, hin, extras, out] = BLOCKS[key], X = TX[key];
+    const vis = t >= kin - 0.01 && t < out + 0.36;
+    X.b.style.display = vis ? "block" : "none";
+    if (!vis) continue;
+    const o = 1 - easeIn((t - out) / 0.35);
+    show(X.b, o); X.b.style.transform = `translateY(${(-14 * easeIn((t - out) / 0.35)).toFixed(2)}px)`;
+    show(X.k, smooth((t - kin) / 0.4)); X.rule.style.transform = `scaleX(${easeOut((t - kin) / 0.6).toFixed(3)})`;
+    X.k.style.transform = `translateX(${(-18 * (1 - easeOut((t - kin) / 0.6))).toFixed(2)}px)`;
+    riseWords(X.words, t, hin, 0.06);
+    show(X.h, t >= hin ? 1 : 0);
+    X.parts.forEach((p, i) => {
+      const at = key === "c" ? extras[0] : extras[i];
+      if (key === "c") { show(p, t >= at ? 1 : 0); riseWords(X.words2, t, at, 0.06); }
+      else { show(p, smooth((t - at) / 0.5)); p.style.transform = `translateY(${(16 * (1 - easeOut((t - at) / 0.6))).toFixed(2)}px)`; }
+    });
+    scrim = Math.max(scrim, smooth((t - kin + 0.4) / 0.6) * (1 - smooth((t - out - 0.1) / 0.5)));
+  }
+  // Lane labels ride on the studio reveal; each appears with its bay's light.
+  const labCue = [C("lane.1"), 5.3, C("lane.3"), C("lane.4"), C("wall.on")];
+  const placed = [];
+  TX.labels.forEach((e, i) => {
+    const on = t >= 5 && t < 9.8 ? smooth((t - labCue[i] - 0.05) / 0.3) * (1 - smooth((t - 9.4) / 0.3)) : 0;
+    e.style.display = on > 0.002 ? "block" : "none";
+    if (on <= 0.002) return;
+    const p = v3(i < 4 ? LX[i] : WB, i < 4 ? 1.3 : 2.9, i < 4 ? NETZ : WALLZ).project(camera);
+    let x = (p.x + 1) / 2 * W, y = (1 - p.y) / 2 * H - 60;
+    const mx = PORTRAIT ? 80 : 110, myTop = PORTRAIT ? 180 : 70, myBot = PORTRAIT ? 260 : 70;
+    x = clamp(x - 70, mx, W - mx - 220); y = clamp(y, myTop, H - myBot - 60);
+    if (!PORTRAIT && x < 1400) y = Math.min(y, H - 470); else if (PORTRAIT) y = Math.max(y, 820);
+    // Labels never collide: a label that would overlap an earlier one steps below it.
+    const wdt = e.offsetWidth || 200;
+    for (let pass = 0; pass < 4; pass++) for (const q of placed) if (x < q.x + q.w + 16 && q.x < x + wdt + 16 && Math.abs(y - q.y) < 60) y = q.y + 62;
+    placed.push({ x, y, w: wdt });
+    e.style.transform = `translate(${x.toFixed(1)}px, ${(y + 10 * (1 - on)).toFixed(1)}px)`; show(e, on);
+  });
+  // Closing card.
+  const G = TX.g, gv = t >= 27.85;
+  G.card.style.display = gv ? "flex" : "none";
+  if (gv) {
+    show(G.kick, smooth((t - 27.9) / 0.5)); G.kick.style.transform = `translateY(${(10 * (1 - easeOut((t - 27.9) / 0.6))).toFixed(2)}px)`;
+    show(G.word, t >= C("g.word") - 0.01 ? 1 : 0); riseWords(G.words, t, C("g.word") - 0.04, 0.07);
+    show(G.sub, smooth((t - 28.55) / 0.5)); G.sub.style.transform = `translateY(${(12 * (1 - easeOut((t - 28.55) / 0.6))).toFixed(2)}px)`;
+    const c = easeOut((t - C("g.cta") + 0.06) / 0.45);
+    show(G.cta, smooth((t - C("g.cta") + 0.06) / 0.3)); G.cta.style.transform = `scale(${(0.92 + 0.08 * c).toFixed(4)})`;
+    show(G.url, smooth((t - 29.1) / 0.4));
+  }
+  const cardScrim = smooth((t - 27.6) / 0.8);
+  TX.scrimEl.style.background = t >= 27.5 ? TX.scrims.card : TX.scrims.side;
+  show(TX.scrimEl, t >= 27.5 ? cardScrim : scrim);
+}
+
+// ---------- sound: synthesized for this film ----------
+const TAU = Math.PI * 2, BED = 0.3;
+function hitClip(R, rnd, { dur = 0.4, modes = [], click = 0, clickMs = 1.2, noise = 0, noiseMs = 10, noiseLP = 5000, grit = 0, gritMs = 40, pitch = 1, stretch = 1, tail = null }) {
+  const n = Math.round(R * dur), out = new Float32Array(n), nz = new Float32Array(n), gr = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const t = i / R; nz[i] = (rnd() * 2 - 1) * Math.exp(-t / (noiseMs / 1000)); gr[i] = (rnd() * 2 - 1) * Math.exp(-t / (gritMs / 1000)); }
+  sound.lowpass(nz, R, noiseLP); sound.lowpass(gr, R, 3200);
+  const cl = Math.round(R * clickMs / 1000);
+  for (let i = 0; i < n; i++) {
+    const t = i / R; let v = 0;
+    for (const m of modes) v += m.a * Math.sin(TAU * m.f * pitch * t + (m.p || 0)) * Math.exp(-t / (m.d * stretch));
+    if (i < cl) v += click * (rnd() * 2 - 1) * (1 - i / cl);
+    v += noise * nz[i] * 4 + grit * gr[i] * (1 - Math.exp(-t / 0.004));
+    if (tail) v += tail(t);
+    out[i] = v;
+  }
+  // Normalize, then a gentle tanh drive: more body per unit of peak, attack still the loudest moment.
+  let peak = 0; for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(out[i]));
+  const drive = 1.8;
+  for (let i = 0; i < n; i++) out[i] = Math.tanh(drive * out[i] / peak);
+  sound.lowpass(out, R, 9000); sound.lowpass(out, R, 11000);
+  peak = 0; for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(out[i]));
+  for (let i = 0; i < n; i++) out[i] /= peak;
+  return out;
+}
+const SFX = {
+  racket: (R, rnd, o = {}) => hitClip(R, rnd, { dur: 0.35, click: 0.9, clickMs: 1.1, noise: 0.18, noiseMs: 6, noiseLP: 7000,
+    modes: [{ f: 505, a: 0.8, d: 0.011 }, { f: 1230, a: 0.5, d: 0.0065 }, { f: 2620, a: 0.3, d: 0.0035 }, { f: 172, a: 0.42, d: 0.02 }, { f: 860, a: 0.1, d: 0.06 }], ...o }),
+  clay: (R, rnd, o = {}) => hitClip(R, rnd, { dur: 0.3, click: 0.5, clickMs: 0.9, noise: 0.25, noiseMs: 12, noiseLP: 2600, grit: 0.16, gritMs: 45,
+    modes: [{ f: 182, a: 0.72, d: 0.016 }, { f: 395, a: 0.38, d: 0.009 }, { f: 770, a: 0.16, d: 0.005 }], ...o }),
+  machine: (R, rnd, o = {}) => hitClip(R, rnd, { dur: 0.45, click: 0.8, clickMs: 1.0, noise: 0.32, noiseMs: 18, noiseLP: 3400,
+    modes: [{ f: 94, a: 0.5, d: 0.03 }, { f: 930, a: 0.36, d: 0.006 }, { f: 1860, a: 0.14, d: 0.004 }],
+    tail: (t) => 0.035 * Math.sin(TAU * 1460 * t) * Math.exp(-t / 0.12) * (1 - Math.exp(-t / 0.01)), ...o }),
+  wall: (R, rnd, o = {}) => hitClip(R, rnd, { dur: 0.4, click: 0.85, clickMs: 1.2, noise: 0.22, noiseMs: 9, noiseLP: 5000,
+    modes: [{ f: 288, a: 0.8, d: 0.016 }, { f: 722, a: 0.44, d: 0.008 }, { f: 1610, a: 0.24, d: 0.004 }, { f: 86, a: 0.38, d: 0.06 }], ...o }),
+  light: (R, rnd, o = {}) => hitClip(R, rnd, { dur: 0.9, click: 0.9, clickMs: 2.0, noise: 0.3, noiseMs: 16, noiseLP: 4200,
+    modes: [{ f: 64, a: 0.55, d: 0.07 }, { f: 141, a: 0.32, d: 0.05 }, { f: 2120, a: 0.1, d: 0.012 }, { f: 3310, a: 0.07, d: 0.008 }],
+    tail: (t) => 0.03 * (Math.sin(TAU * 120 * t) + 0.5 * Math.sin(TAU * 240 * t)) * Math.exp(-t / 0.5) * (1 - Math.exp(-t / 0.03)), ...o }),
+  bell: (R, rnd, f, o = {}) => hitClip(R, rnd, { dur: 2.6, click: 1.0, clickMs: 2.0, noise: 0.2, noiseMs: 4, noiseLP: 7000,
+    modes: [{ f: f * 4.17, a: 0.45, d: 0.006 }, { f, a: 0.22, d: 0.9 }, { f: f * 2.01, a: 0.08, d: 0.45 }, { f: f * 3.03, a: 0.04, d: 0.22 }, { f: f / 2, a: 0.12, d: 1.2 }], ...o }),
+};
+// Freeverb-style room: parallel damped combs into series allpasses.
+function room(input, R, { feedback = 0.8, damp = 0.35, spread = 23 } = {}) {
+  const sc = R / 44100, combs = [1557, 1617, 1491, 1422, 1277, 1356], alls = [556, 441, 341, 225];
+  const run = (off) => {
+    const out = new Float32Array(input.length);
+    for (const d0 of combs) {
+      const d = Math.round((d0 + off) * sc), buf = new Float32Array(d); let idx = 0, store = 0;
+      for (let i = 0; i < input.length; i++) { const y = buf[idx]; store = y * (1 - damp) + store * damp; buf[idx] = input[i] + store * feedback; out[i] += y; idx = (idx + 1) % d; }
+    }
+    for (const a0 of alls) {
+      const d = Math.round((a0 + off) * sc), buf = new Float32Array(d); let idx = 0;
+      for (let i = 0; i < out.length; i++) { const b = buf[idx], x = out[i]; out[i] = b - x; buf[idx] = x + b * 0.5; idx = (idx + 1) % d; }
+    }
+    return out;
+  };
+  return [run(0), run(spread)];
+}
+function synthesize({ sampleRate: R, duration }) {
+  const out = sound.stereo(R, duration), N = out.length, rnd = sound.seeded(97), at = (n) => C(n);
+  const cues = HITS.map((h) => h.t);
+  // Harmonic bed: detuned saw pads through a slowly opening low-pass, a sub root, fading in from silence.
+  const chords = [[0, 8.5, [73.42, 110.0, 174.6, 220.0, 329.6]], [8, 16.5, [58.27, 116.5, 174.6, 220.0, 293.7]],
+                  [16, 24.5, [49.0, 98.0, 146.8, 233.1, 220.0 * 2 * 0.795]], [24, 28, [55.0, 110.0, 146.8, 164.8, 220.0]], [27.5, 32, [73.42, 110.0, 185.0, 220.0, 329.6]]];
+  const bedL = new Float32Array(N), bedR = new Float32Array(N);
+  for (const [a, b, notes] of chords) {
+    const i0 = Math.max(0, Math.floor((a - 0.6) * R)), i1 = Math.min(N, Math.ceil((b + 0.6) * R));
+    for (let i = i0; i < i1; i++) {
+      const t = i / R, env = smooth((t - a + 0.6) / 1.2) * (1 - smooth((t - b + 0.6) / 1.2));
+      let l = 0, r = 0;
+      notes.forEach((f, k) => {
+        const g = (k === 0 ? 0.55 : 0.32) * env;
+        l += g * (2 * ((f * 1.0021 * t + k * 0.13) % 1) - 1) + g * 0.6 * (2 * ((f * 0.9983 * t + 0.4) % 1) - 1);
+        r += g * (2 * ((f * 0.9979 * t + k * 0.29) % 1) - 1) + g * 0.6 * (2 * ((f * 1.0017 * t + 0.7) % 1) - 1);
+        if (k === 0) { const s = 0.5 * env * Math.sin(TAU * f * 0.5 * t); l += s; r += s; }
+      });
+      bedL[i] += l; bedR[i] += r;
+    }
+  }
+  const cutoff = (t) => 420 + 1000 * smooth(t / 24) + 700 * smooth((t - 27.5) / 2) - 600 * smooth((t - 30.5) / 1.5);
+  for (const ch of [bedL, bedR]) { sound.lowpass(ch, R, cutoff); sound.lowpass(ch, R, cutoff); }
+  for (let i = 0; i < N; i++) { const t = i / R, f = smooth(t / 2.2) * (1 - smooth((t - 31.2) / 0.8)) * (0.85 + 0.15 * Math.sin(TAU * 0.125 * t)); bedL[i] *= f; bedR[i] *= f; }
+  // A quiet rhythmic pulse while the work is happening (eighths at 120 BPM), and room tone.
+  const pulse = new Float32Array(N);
+  for (let k = 0; k < 64; k++) {
+    const t0 = k * 0.25; if (t0 < 10 || t0 > 27) continue;
+    const i0 = Math.round(t0 * R), acc = k % 2 === 0 ? 1 : 0.55;
+    for (let i = 0; i < Math.round(0.05 * R) && i0 + i < N; i++) pulse[i0 + i] += acc * (rnd() * 2 - 1) * Math.exp(-i / R / 0.008);
+  }
+  const hp = Float32Array.from(pulse); sound.lowpass(hp, R, 1800); for (let i = 0; i < N; i++) pulse[i] = (pulse[i] - hp[i]) * 0.09;
+  const tone = new Float32Array(N); for (let i = 0; i < N; i++) tone[i] = rnd() * 2 - 1;
+  sound.lowpass(tone, R, 320); sound.lowpass(tone, R, 320);
+  for (let i = 0; i < N; i++) tone[i] *= 0.9 * smooth(i / R / 1.0);
+  for (const ch of [bedL, bedR, pulse]) sound.duck(ch, R, cues, { depth: 0.55, attack: 0.05, lead: 0.03, release: 0.3 });
+  for (let i = 0; i < N; i++) { out.left[i] += bedL[i] * BED + pulse[i] + tone[i] * 0.2; out.right[i] += bedR[i] * BED + pulse[i] + tone[i] * 0.2; }
+
+  // Hits: every ball contact gets its own material. A send bus feeds the room.
+  const send = sound.stereo(R, duration);
+  const hit = (clip, t, gain, pan, wet = 0.25) => { sound.place(out, clip, t, { gain, pan }); sound.place(send, clip, t, { gain: gain * wet, pan }); };
+  hit(SFX.light(R, rnd, { pitch: 1.0 }), at("light.a"), 0.7, 0.0, 0.5);
+  hit(SFX.light(R, rnd, { pitch: 1.04 }), at("light.b"), 0.74, 0.08, 0.45);
+  hit(SFX.light(R, rnd, { pitch: 1.08 }), at("light.c"), 0.8, 0.16, 0.4);
+  hit(SFX.machine(R, rnd), at("a.fire"), 0.55, -0.1, 0.5);
+  hit(SFX.clay(R, rnd), at("a.bounce"), 0.95, 0.35, 0.25);
+  ["lane.1", "lane.3", "lane.4", "wall.on"].forEach((c, i) => hit(SFX.light(R, rnd, { pitch: 0.92 + 0.06 * i }), at(c), 0.62, -0.6 + 0.4 * i, 0.6));
+  hit(SFX.racket(R, rnd, { noiseLP: 3500 }), at("wall.strike"), 0.5, 0.6, 0.7);
+  hit(SFX.wall(R, rnd), at("wall.hit"), 0.62, 0.65, 0.7);
+  hit(SFX.clay(R, rnd), at("wall.bounce"), 0.45, 0.65, 0.7);
+  for (let k = 1; k <= 3; k++) {
+    hit(SFX.machine(R, rnd, { pitch: 1 + 0.03 * k }), at(`c.fire${k}`), 0.85, 0.15, 0.3);
+    hit(SFX.clay(R, rnd, { pitch: 0.96 + 0.04 * k }), at(`c.land${k}`), 0.55, [-0.35, 0.4, 0.05][k - 1], 0.55);
+  }
+  // Slow-motion strike: the swing's air ends before contact; contact is a deep, long, pitched-down hit with a sub.
+  const swish = sound.clip(R, 0.5, (t) => (rnd() * 2 - 1) * Math.sin(Math.PI * Math.min(1, t / 0.5)) ** 3 * 0.12);
+  sound.lowpass(swish, R, 1400); sound.place(out, swish, at("d.hit") - 0.58, { align: "start", gain: 1, pan: 0.2 });
+  hit(SFX.clay(R, rnd, { pitch: 0.8, stretch: 1.6 }), at("d.bounce"), 0.62, -0.2, 0.35);
+  const big = SFX.racket(R, rnd, { dur: 1.4, pitch: 0.66, stretch: 2.6, click: 1.0, clickMs: 1.6, noise: 0.25, noiseMs: 14,
+    tail: (t) => 0.42 * Math.sin(TAU * 50 * t) * Math.exp(-t / 0.38) * (1 - Math.exp(-t / 0.006)) });
+  hit(big, at("d.hit"), 1.0, 0.0, 0.55);
+  for (let k = 1; k <= 5; k++) hit(SFX.clay(R, rnd, { pitch: 0.94 + 0.03 * k }), at(`e.land${k}`), 0.6 + 0.05 * k, [-0.3, 0.25, -0.1, 0.2, 0][k - 1], 0.4);
+  hit(SFX.clay(R, rnd), at("f.in"), 0.7, 0.3, 0.3);
+  hit(SFX.racket(R, rnd), at("f.hit"), 1.0, 0.3, 0.35);
+  hit(SFX.clay(R, rnd, { noiseLP: 2200 }), at("f.bounce"), 0.5, -0.3, 0.7);
+  hit(SFX.bell(R, rnd, 587.3), at("g.word"), 0.5, 0.0, 0.6);
+  hit(SFX.bell(R, rnd, 880.0), at("g.cta"), 0.4, 0.1, 0.6);
+  const [rl, rr] = room(send.left.map((x, i) => 0.5 * (x + send.right[i])), R, { feedback: 0.82, damp: 0.4 });
+  for (let i = 0; i < N; i++) { out.left[i] += rl[i] * 0.03; out.right[i] += rr[i] * 0.03; }
+  return [out.left, out.right];
+}
+
+// ---------- boot ----------
+vch.seek = seek;
+vch.audio = synthesize;
+vch.ready = loadContract("/examples/atl-promo.json").then(async (loaded) => {
+  const c = loaded.contract;
+  C = loaded.cue; HITS = loaded.hits; DUR = c.video.duration; W = c.video.width; H = c.video.height; PORTRAIT = H > W;
+  const style = typeof c.style === "string" ? await fetch(`/${c.style}`).then((r) => r.json()) : c.style;
+  S = style.colors;
+  const stage = document.getElementById("stage");
+  stage.style.width = `${W}px`; stage.style.height = `${H}px`;
+  for (const [k, v] of Object.entries({ cream: S.cream, "clay-light": S.clay_light, "green-deep": S.green_deep })) stage.style.setProperty(`--${k}`, v);
+  await Promise.all(["600 26px Inter", "400 116px 'Instrument Serif'", "600 24px JBMono", "58px NotoSerifSC"].map((f) => document.fonts.load(f, f.includes("Noto") ? "下次接着练" : "Aa")));
+  buildWarp(); buildLooks(); build(); choreograph(); buildText();
+  if (!loaded.harness) preview(stage, W, H, DUR, seek);
+});
+</script>
+</body>
+</html>

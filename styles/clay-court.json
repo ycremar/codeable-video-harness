@@ -1,0 +1,25 @@
+{
+ "name": "clay-court",
+ "mode": "dark",
+ "notes": "A Tennis Lab promo: terracotta clay, white lines, deep court-green surrounds, cream type. Roles, not a layout.",
+ "colors": {
+  "clay": "#B4532E",
+  "clay_light": "#D8865A",
+  "clay_dark": "#7C3219",
+  "line": "#EEE8DA",
+  "green": "#0F4632",
+  "green_deep": "#082A1E",
+  "green_mid": "#1C5A41",
+  "ink": "#0A1F17",
+  "cream": "#F4ECDC",
+  "cream_dim": "#DCD1BC",
+  "ball": "#D2D84E",
+  "light_warm": "#FFE9CC"
+ },
+ "type": {
+  "display": "Instrument Serif",
+  "text": "Inter",
+  "mono": "JetBrains Mono",
+  "zh": "Noto Serif SC"
+ }
+}
