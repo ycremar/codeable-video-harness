@@ -19,6 +19,8 @@
            font-family: "Inter", sans-serif; color: #F3F1EC; }
   canvas { position: absolute; left: 0; top: 0; }
   .layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+  /* Own compositing layers: without them, rasterising text mid-fade alters later rasters of the same text (breaks seek determinism). */
+  #dom, #card, #scrim, #card-scrim { will-change: transform; }
   .abs { position: absolute; left: 0; top: 0; white-space: nowrap; }
   .block { position: absolute; display: flex; flex-direction: column; align-items: flex-start; }
   .kicker { font: 600 26px/1.2 "JBMono", monospace; letter-spacing: 0.22em; color: #D9F23E; margin-bottom: 22px; }
