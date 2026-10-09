@@ -1,0 +1,112 @@
+{
+ "version": 1,
+ "title": "A TENNIS LAB - PROMO 16:9",
+ "seed": 41,
+ "backend": "html",
+ "html": {
+  "entry": "compositions/atl-promo/index.html"
+ },
+ "style": "styles/clay-court.json",
+ "video": {
+  "width": 1920,
+  "height": 1080,
+  "fps": 30,
+  "duration": 32
+ },
+ "render": {
+  "samples": 1
+ },
+ "assets": [
+  {"path": "assets/fonts/Inter.ttf", "source": "https://github.com/google/fonts/tree/main/ofl/inter", "license": "SIL OFL 1.1; assets/fonts/Inter-OFL.txt"},
+  {"path": "assets/fonts/JetBrainsMono.ttf", "source": "https://github.com/google/fonts/tree/main/ofl/jetbrainsmono", "license": "SIL OFL 1.1; assets/fonts/JetBrainsMono-OFL.txt"},
+  {"path": "assets/fonts/InstrumentSerif-Regular.ttf", "source": "https://github.com/google/fonts/tree/main/ofl/instrumentserif (unmodified)", "license": "SIL OFL 1.1; assets/fonts/InstrumentSerif-OFL.txt"},
+  {"path": "assets/fonts/InstrumentSerif-Italic.ttf", "source": "https://github.com/google/fonts/tree/main/ofl/instrumentserif (unmodified)", "license": "SIL OFL 1.1; assets/fonts/InstrumentSerif-OFL.txt"},
+  {"path": "assets/fonts/NotoSerifSC-ATLSubset.ttf", "source": "https://github.com/google/fonts/tree/main/ofl/notoserifsc, instanced at wght=500 and subset to 下次接着练「」 with fontTools (no Reserved Font Name in the licence)", "license": "SIL OFL 1.1; assets/fonts/NotoSerifSC-OFL.txt"},
+  {"path": "compositions/_vendor/three/", "source": "npm three@0.186.0 (build/ and a subset of examples/jsm), unmodified", "license": "MIT; compositions/_vendor/three/LICENSE"},
+  {"path": "compositions/_lib/", "source": "this repository", "license": "MIT; LICENSE"}
+ ],
+ "brief": "32-second pre-opening promo for A Tennis Lab (ATL), an indoor tennis training studio in Seattle, opening soon. Facts allowed (and only these): 4 half-court training lanes plus a practice wall called The Wall; programmable ball machines; human coaching; rigorous, focused practice that turns into progress you can take into matches; each session picks up where the last left off (下次接着练); atennislab.com; call to action: Join the waitlist. Forbidden: any AI / smart / algorithm language or imagery implying it, pricing, address, hours, dates, stats, testimonials. Tone: serious, premium training brand. Colour: Roland-Garros palette - terracotta clay, white lines, deep green surrounds, cream type; no dark + tennis-yellow look. Picture: one three.js studio world with cinematic lighting, materials, depth of field and motivated camera moves: lights strike on over a clay lane; a crane reveals four lanes and The Wall; a programmable machine aims and feeds three targets; a slow-motion racket strike; last session's ball marks stay in the clay while today's land tighter; a rally on a full match court; closing card. Sound: synthesized in the composition; every ball contact (racket, clay, wall, machine) is an audible, distinct hit; a restrained harmonic bed under it.",
+ "audio": {
+  "mode": "composition",
+  "loudness_target": -16,
+  "peak_ceiling_dbfs": -2
+ },
+ "timing": {
+  "bpm": 120,
+  "beat_offset": 0,
+  "hits": [
+   {"t": 0.5, "kind": "light", "cue": "light.a"},
+   {"t": 1.0, "kind": "light", "cue": "light.b"},
+   {"t": 1.5, "kind": "light", "cue": "light.c"},
+   {"t": 2.5, "kind": "machine", "cue": "a.fire"},
+   {"t": 3.4, "kind": "clay", "cue": "a.bounce"},
+   {"t": 5.5, "kind": "light", "cue": "lane.1"},
+   {"t": 6.0, "kind": "light", "cue": "lane.3"},
+   {"t": 6.5, "kind": "light", "cue": "lane.4"},
+   {"t": 7.0, "kind": "light", "cue": "wall.on"},
+   {"t": 7.5, "kind": "racket", "cue": "wall.strike"},
+   {"t": 8.0, "kind": "wall", "cue": "wall.hit"},
+   {"t": 8.6, "kind": "clay", "cue": "wall.bounce"},
+   {"t": 10.5, "kind": "machine", "cue": "c.fire1"},
+   {"t": 11.3, "kind": "clay", "cue": "c.land1"},
+   {"t": 11.5, "kind": "machine", "cue": "c.fire2"},
+   {"t": 12.3, "kind": "clay", "cue": "c.land2"},
+   {"t": 12.5, "kind": "machine", "cue": "c.fire3"},
+   {"t": 13.3, "kind": "clay", "cue": "c.land3"},
+   {"t": 15.2, "kind": "clay", "cue": "d.bounce"},
+   {"t": 15.8, "kind": "racket", "cue": "d.hit"},
+   {"t": 19.8, "kind": "clay", "cue": "e.land1"},
+   {"t": 20.4, "kind": "clay", "cue": "e.land2"},
+   {"t": 21.0, "kind": "clay", "cue": "e.land3"},
+   {"t": 21.6, "kind": "clay", "cue": "e.land4"},
+   {"t": 22.2, "kind": "clay", "cue": "e.land5"},
+   {"t": 23.8, "kind": "clay", "cue": "f.in"},
+   {"t": 24.2, "kind": "racket", "cue": "f.hit"},
+   {"t": 25.1, "kind": "clay", "cue": "f.bounce"},
+   {"t": 28.0, "kind": "mark", "cue": "g.word"},
+   {"t": 29.0, "kind": "mark", "cue": "g.cta"}
+  ]
+ },
+ "qa": {
+  "sample_every": 1
+ },
+ "scenes": [
+  {"id": "lane", "start": 0, "end": 5, "params": {"beat": "low dolly over raked clay in lane 2; three overhead panels strike on; the machine feeds one ball that bounces past the lens", "copy": ["A TENNIS LAB · SEATTLE", "Practice with intent."]}},
+  {"id": "studio", "start": 5, "end": 10, "params": {"beat": "continuous crane up and back; lanes 1, 3, 4 and The Wall bay light; a ball is struck against The Wall", "copy": ["THE STUDIO", "Four lanes. One wall.", "Four half-court training lanes, plus The Wall.", "LANE 1-4", "THE WALL"]}},
+  {"id": "setup", "start": 10, "end": 14.5, "params": {"beat": "behind the lane-3 machine; it re-aims and feeds three painted targets; rack focus from machine to targets", "copy": ["THE SETUP", "Programmable ball machines.", "Human coaching."]}},
+  {"id": "work", "start": 14.5, "end": 19, "params": {"beat": "macro slow motion: ball bounces, racket meets it, strings and felt, back to speed", "copy": ["THE WORK", "Rigorous, focused practice."]}},
+  {"id": "session", "start": 19, "end": 23.5, "params": {"beat": "overhead on a target: last session's faded marks stay in the clay; today's five balls land closer", "copy": ["SESSION TO SESSION", "Pick up where you left off.", "下次接着练"]}},
+  {"id": "match", "start": 23.5, "end": 27.5, "params": {"beat": "full clay match court; a rally ball bounces, is struck back across the net, lands deep", "copy": ["ON COURT", "Progress you take into matches."]}},
+  {"id": "close", "start": 27.5, "end": 32, "params": {"beat": "back in the quiet lane; a ball rolls to rest; wordmark, line, call to action, website", "copy": ["OPENING SOON", "A Tennis Lab", "Indoor tennis training studio · Seattle", "Join the waitlist", "atennislab.com"]}}
+ ],
+ "requirements": [
+  {"id": "DUR", "description": "Exactly 32 seconds", "kind": "hard", "metric": "duration_s", "op": "eq", "target": 32.0},
+  {"id": "WIDTH", "description": "1920 pixels wide", "kind": "hard", "metric": "width_px", "op": "eq", "target": 1920},
+  {"id": "HEIGHT", "description": "1080 pixels high", "kind": "hard", "metric": "height_px", "op": "eq", "target": 1080},
+  {"id": "FPS", "description": "30 fps", "kind": "hard", "metric": "fps", "op": "eq", "target": 30},
+  {"id": "FRAMES", "description": "Exactly 960 encoded frames", "kind": "hard", "metric": "encoded_frame_count", "op": "eq", "target": 960},
+  {"id": "PTS", "description": "Evenly spaced frame timestamps", "kind": "hard", "metric": "frame_timestamp_jitter_ms", "op": "le", "target": 1},
+  {"id": "AUDIO", "description": "Sound synthesized by the composition exists", "kind": "hard", "metric": "audio_present", "op": "eq", "target": true},
+  {"id": "LOUD-MIN", "description": "Integrated loudness after AAC encode at least -18 LUFS", "kind": "hard", "metric": "integrated_loudness_lufs", "op": "ge", "target": -18},
+  {"id": "LOUD-MAX", "description": "Integrated loudness after AAC encode at most -14 LUFS", "kind": "hard", "metric": "integrated_loudness_lufs", "op": "le", "target": -14},
+  {"id": "TRUE-PEAK", "description": "True peak after AAC encode at most -1 dBTP", "kind": "hard", "metric": "true_peak_dbtp", "op": "le", "target": -1},
+  {"id": "SEEK", "description": "WebGL frames and telemetry unaffected by seek order", "kind": "hard", "metric": "determinism_mismatches", "op": "eq", "target": 0},
+  {"id": "HITS", "description": "A detectable sound lands within 20 ms of every declared cue (every ball contact, light strike and card mark)", "kind": "proxy", "metric": "audio_hit_sync_ms", "op": "le", "target": 20},
+  {"id": "GRID", "description": "Scene cuts sit on the 120 BPM grid", "kind": "proxy", "metric": "beat_cut_error_ms", "op": "le", "target": 1},
+  {"id": "COPY-FACTS", "description": "Approved fact lines appear in visible-text telemetry", "kind": "proxy", "metric": "text_present", "params": {"strings": ["A TENNIS LAB · SEATTLE", "Four lanes. One wall.", "Four half-court training lanes, plus The Wall.", "THE WALL", "Programmable ball machines.", "Human coaching.", "Rigorous, focused practice.", "Pick up where you left off.", "Progress you take into matches."]}, "op": "eq", "target": true},
+  {"id": "CTA", "description": "Closing card shows wordmark, website and the waitlist call to action", "kind": "proxy", "metric": "text_present", "params": {"strings": ["A Tennis Lab", "Join the waitlist", "atennislab.com", "OPENING SOON"]}, "op": "eq", "target": true},
+  {"id": "ZH", "description": "The optional Chinese line appears", "kind": "proxy", "metric": "text_present", "params": {"strings": ["下次接着练"]}, "op": "eq", "target": true},
+  {"id": "NO-TECH", "description": "No AI / smart / algorithm language in the text trace (case-sensitive substrings; bare 'AI' inside words such as TRAINING/WAITLIST is left to the TRUTH review)", "kind": "proxy", "metric": "text_absent", "params": {"strings": [" AI", "AI ", "AI-", "AI.", "A.I.", "smart", "Smart", "SMART", "algorithm", "Algorithm", "ALGORITHM", "machine learning", "Machine learning", "MACHINE LEARNING", "intelligen", "Intelligen", "INTELLIGEN", "data", "Data", "DATA", "adaptive", "Adaptive", "ADAPTIVE", "personali", "Personali", "PERSONALI", "tracking", "Tracking", "TRACKING", "sensor", "Sensor", "SENSOR", "app", "App", "APP"]}, "op": "eq", "target": true},
+  {"id": "NO-CLAIMS", "description": "No pricing, address, hours, dates, stats or testimonial markers in the text trace", "kind": "proxy", "metric": "text_absent", "params": {"strings": ["$", "%", "USD", "per hour", "/hr", "Ave", "Street", " St.", "WA 98", "a.m.", "p.m.", " AM", " PM", "Open now", "Opening on", "202", "Monday", "Jan", "Spring", "Summer", "Fall", "Winter", "★", "\u201c", "\u201d", "best", "Best", "BEST", "#1"]}, "op": "eq", "target": true},
+  {"id": "FONT", "description": "All visible text at least 24 px at 1080p", "kind": "proxy", "metric": "minimum_text_size_px", "op": "ge", "target": 24},
+  {"id": "CONTRAST", "description": "Settled text colour vs rendered backing at least 4.5:1", "kind": "proxy", "metric": "minimum_contrast", "op": "ge", "target": 4.5},
+  {"id": "SAFE", "description": "Text inside 5% margins (96 px sides, 54 px top/bottom)", "kind": "proxy", "metric": "safe_area_violations", "params": {"margins": [96, 54, 96, 54]}, "op": "eq", "target": 0},
+  {"id": "OVERLAP", "description": "No two text boxes overlap", "kind": "proxy", "metric": "text_overlap_violations", "op": "eq", "target": 0},
+  {"id": "HOLD", "description": "Every headline and the closing card lines stay fully unchanged for at least 2.4 s", "kind": "proxy", "metric": "minimum_text_hold_s", "params": {"ids": ["a.head", "b.head", "c.head", "d.head", "e.head", "f.head", "g.word", "g.cta", "g.url"]}, "op": "ge", "target": 2.4},
+  {"id": "DEAD-TIME", "description": "No decoded interval longer than 1.5 s without visible change", "kind": "proxy", "metric": "max_static_hold_s", "op": "le", "target": 1.5},
+  {"id": "POPS", "description": "No one-frame flashes or jumps", "kind": "proxy", "metric": "single_frame_pops", "op": "eq", "target": 0},
+  {"id": "TRUTH", "description": "Only the approved ATL facts; no tech, pricing, address, hours, date, stats or testimonials", "kind": "human", "rubric": "Watch the full decoded video with sound. Every on-screen claim must trace to the brief's fact list (indoor tennis training studio, Seattle, opening soon, 4 half-court lanes, The Wall, programmable ball machines, human coaching, rigorous focused practice into match progress, session continuity / 下次接着练, atennislab.com, Join the waitlist). No AI/smart/algorithm wording or imagery implying it, no prices, address, hours, dates, invented numbers or testimonials. Lane numbers are labels, not stats. Owner verifies facts before publication. Cite timestamps."},
+  {"id": "CRAFT", "description": "Premium, serious training-brand feel; 3D reads as a real lit space", "kind": "human", "rubric": "At normal speed with sound: is the tone serious and premium (not cute, not generic)? Do light, clay, felt and graphite read as physical materials? Are the camera moves motivated and smooth? Is every line readable at pace? Are the ball contacts audible and distinct (racket vs clay vs wall vs machine)? Is the palette Roland-Garros clay/green/cream with no dark + tennis-yellow look? Cite timestamps."},
+  {"id": "BRAND", "description": "Typeset wordmark and closing card acceptable to the ATL owner", "kind": "human", "rubric": "ATL owner decides whether the typeset 'A Tennis Lab' wordmark (Instrument Serif), colours and closing card are on brand. No official logo asset was supplied."}
+ ]
+}
