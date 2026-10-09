@@ -39,10 +39,7 @@
  ],
  "brief": "8-second space clip: a generic Earth-like planet (seeded procedural texture), cloud shell and fresnel atmosphere, seeded starfield; a small station passes the lens; sunrise over the limb with bloom. On-screen fact: a station about 400 km up circles Earth roughly every 92 minutes (about 15.7 orbits a day).",
  "audio": {
-  "mode": "procedural",
-  "gain": 0.8,
-  "bed": false,
-  "pad": 1.4,
+  "mode": "composition",
   "loudness_target": -16,
   "peak_ceiling_dbfs": -2
  },
@@ -52,47 +49,38 @@
   "hits": [
    {
     "t": 0.3,
-    "kind": "tick",
     "cue": "title.in"
    },
    {
     "t": 0.8,
-    "kind": "whoosh",
     "cue": "station.pass"
    },
    {
     "t": 2.0,
-    "kind": "impact",
     "cue": "station.close"
    },
    {
     "t": 2.6,
-    "kind": "tick",
     "cue": "caption.in"
    },
    {
     "t": 3.4,
-    "kind": "impact",
     "cue": "sunrise"
    },
    {
     "t": 4.2,
-    "kind": "chime",
     "cue": "count"
    },
    {
     "t": 5.4,
-    "kind": "tick",
     "cue": "count.mid"
    },
    {
     "t": 6.4,
-    "kind": "chime",
     "cue": "count.end"
    },
    {
     "t": 7.4,
-    "kind": "whoosh",
     "cue": "drift"
    }
   ]
@@ -161,7 +149,7 @@
   },
   {
    "id": "AUDIO",
-   "description": "Original synthesized audio exists",
+   "description": "Sound synthesized by the composition exists",
    "kind": "hard",
    "metric": "audio_present",
    "op": "eq",

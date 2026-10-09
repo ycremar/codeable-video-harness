@@ -17,6 +17,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from . import signals
+from .audio import render_audio
 from .backends import create_renderer
 from .core import digest, finite, normalized_hits
 from .pipeline import contact_sheet, probe
@@ -26,6 +27,7 @@ SMALL_TEXT_PX = 18
 PROFILE_SHEET_COLS = 6
 TIMELINE_SIZE = (1600, 260)
 VISUAL_SYNC_WINDOW_S = 0.1
+SOUND_SYNC_WARN_MS = 20.0
 CUT_SYNC_WINDOW_S = 0.05
 # Pairwise style_distance among the 511 awesome-opus5-5-videos posters measured on 2026-10-08.
 CORPUS_STYLE_DISTANCE = {"p10": 0.82, "median": 1.34, "p90": 2.02}
@@ -120,6 +122,37 @@ def render_stills(spec: dict[str, Any], root: Path, out: Path, *, times: list[fl
     return summary
 
 
+def preview_sound(spec: dict[str, Any], root: Path, out: Path, *, trust_code: bool) -> dict[str, Any]:
+    """Render only the audio and check loudness and cue sync before paying for a full render.
+
+    Measures the WAV before encoding; `vch run` measures the AAC encode, which can differ slightly.
+    """
+    out = Path(out)
+    if out.exists():
+        raise FileExistsError("Refuse to overwrite an existing sound preview")
+    out.mkdir(parents=True)
+    renderer = create_renderer(spec, root, trust_code)
+    try:
+        path, info = render_audio(spec, root, out, renderer)
+    finally:
+        renderer.close()
+    if path is None:
+        raise ValueError("audio.mode is 'none': nothing to preview")
+    loudness = signals.loudness_of_file(path)
+    onsets = np.array([e["t"] for e in signals.detect_onsets(signals.decode_audio(path))])
+    hits = []
+    for hit in normalized_hits(spec.get("timing", {})):
+        error = float(np.min(np.abs(onsets - hit["t"]))) * 1000 if len(onsets) else None
+        hits.append({"t": hit["t"], "cue": hit["cue"], "error_ms": None if error is None else round(error, 1)})
+    known = [h["error_ms"] for h in hits if h["error_ms"] is not None]
+    summary = {"audio": path.name, **loudness, "mastering": info.get("mastering"), "onsets": len(onsets),
+               "worst_hit_ms": max(known) if known else None,
+               "missed": [h for h in hits if h["error_ms"] is None or h["error_ms"] > SOUND_SYNC_WARN_MS], "hits": hits,
+               "note": "pre-encode WAV; the full run measures the encoded AAC audio"}
+    (out / "sound.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2))
+    return summary
+
+
 def _scene_summary(scene: dict[str, Any]) -> str:
     params = scene.get("params", {})
     parts = []
@@ -129,8 +162,6 @@ def _scene_summary(scene: dict[str, Any]) -> str:
     headline = params.get("headline")
     if headline:
         parts.append("“" + " / ".join(headline if isinstance(headline, list) else [headline]) + "”")
-    if scene.get("narration"):
-        parts.append("VO: " + " ".join(scene["narration"]))
     return "; ".join(parts).replace("|", "/") or "—"
 
 
@@ -140,14 +171,14 @@ def storyboard_markdown(spec: dict[str, Any]) -> str:
     bpm = timing.get("bpm")
     hits = normalized_hits(timing)
     lines = [f"# Storyboard: {spec.get('title', 'untitled')}", "",
-             f"{v['width']}×{v['height']} · {v['fps']} fps · {v['duration']} s · backend `{spec.get('backend', 'pillow')}`"
+             f"{v['width']}×{v['height']} · {v['fps']} fps · {v['duration']} s · backend `{spec.get('backend')}`"
              f" · audio `{spec.get('audio', {'mode': 'none'})['mode']}`" + (f" · {bpm} BPM" if bpm else ""), "",
              "| # | Scene | Window (s) | Beats | Hits | Content |", "|---|---|---|---|---|---|"]
     for i, scene in enumerate(spec["scenes"], 1):
         a, b = scene["start"], scene["end"]
         beats = f"{(b - a) * bpm / 60:g}" if bpm else "—"
         inside = [h for h in hits if a <= h["t"] < b]
-        hit_text = ", ".join(f"{h['t']:g} {h['kind']}" for h in inside) or "—"
+        hit_text = ", ".join(f"{h['t']:g} {h['cue'] or h['kind'] or 'hit'}" for h in inside) or "—"
         lines.append(f"| {i} | {scene['id']} | {a:g}–{b:g} | {beats} | {hit_text} | {_scene_summary(scene)} |")
     kinds = [r["kind"] for r in spec["requirements"]]
     lines += ["", f"Requirements: {kinds.count('hard')} hard, {kinds.count('proxy')} proxy, {kinds.count('human')} human."]

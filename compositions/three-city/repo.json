@@ -1,28 +1,28 @@
 {
- "snapshot": "2026-10-08",
- "source": "git ls-files of this repository; lines = newline count; vendored libraries excluded",
+ "snapshot": "2026-10-09",
+ "source": "git ls-files (tracked and untracked, not ignored) of this repository; lines = newline count; vendored libraries and this snapshot excluded",
  "files": [
   {
    "path": ".claude/skills/codeable-video/SKILL.md",
-   "lines": 62,
+   "lines": 77,
    "kind": "docs",
    "district": ".claude"
   },
   {
    "path": ".github/workflows/browser.yml",
-   "lines": 24,
+   "lines": 18,
    "kind": "config",
    "district": ".github"
   },
   {
    "path": ".github/workflows/test.yml",
-   "lines": 17,
+   "lines": 16,
    "kind": "config",
    "district": ".github"
   },
   {
    "path": "AGENTS.md",
-   "lines": 29,
+   "lines": 33,
    "kind": "docs",
    "district": "root"
   },
@@ -34,21 +34,9 @@
   },
   {
    "path": "README.md",
-   "lines": 278,
+   "lines": 189,
    "kind": "docs",
    "district": "root"
-  },
-  {
-   "path": "adapters/model_api.py",
-   "lines": 101,
-   "kind": "python",
-   "district": "adapters"
-  },
-  {
-   "path": "adapters/planned_author.py",
-   "lines": 21,
-   "kind": "python",
-   "district": "adapters"
   },
   {
    "path": "assets/fonts/Inter-OFL.txt",
@@ -63,99 +51,15 @@
    "district": "assets"
   },
   {
-   "path": "assets/fonts/NotoSerifSC-OFL.txt",
-   "lines": 94,
-   "kind": "docs",
-   "district": "assets"
+   "path": "compositions/_lib/clip.js",
+   "lines": 99,
+   "kind": "javascript",
+   "district": "compositions"
   },
   {
-   "path": "backends/pdoom/PROVENANCE.md",
-   "lines": 12,
-   "kind": "docs",
-   "district": "backends"
-  },
-  {
-   "path": "backends/pdoom/index.html",
-   "lines": 1,
-   "kind": "html",
-   "district": "backends"
-  },
-  {
-   "path": "backends/pdoom/package.json",
-   "lines": 12,
-   "kind": "data",
-   "district": "backends"
-  },
-  {
-   "path": "benchmarks/reference/RESULTS.md",
-   "lines": 93,
-   "kind": "docs",
-   "district": "benchmarks"
-  },
-  {
-   "path": "benchmarks/reference/candidate.json",
-   "lines": 588,
-   "kind": "data",
-   "district": "benchmarks"
-  },
-  {
-   "path": "benchmarks/reference/constraints.json",
-   "lines": 182,
-   "kind": "data",
-   "district": "benchmarks"
-  },
-  {
-   "path": "benchmarks/reference/evidence/failed-render-003-manifest.json",
-   "lines": 68,
-   "kind": "data",
-   "district": "benchmarks"
-  },
-  {
-   "path": "benchmarks/reference/evidence/failed-render-003-report.json",
-   "lines": 221,
-   "kind": "data",
-   "district": "benchmarks"
-  },
-  {
-   "path": "benchmarks/reference/evidence/manifest.json",
-   "lines": 68,
-   "kind": "data",
-   "district": "benchmarks"
-  },
-  {
-   "path": "benchmarks/reference/evidence/report.json",
-   "lines": 221,
-   "kind": "data",
-   "district": "benchmarks"
-  },
-  {
-   "path": "benchmarks/reference/evidence/retained-failures.json",
-   "lines": 50,
-   "kind": "data",
-   "district": "benchmarks"
-  },
-  {
-   "path": "benchmarks/reference/evidence/video-sha256.txt",
-   "lines": 1,
-   "kind": "docs",
-   "district": "benchmarks"
-  },
-  {
-   "path": "benchmarks/reference/prompt.txt",
-   "lines": 1,
-   "kind": "docs",
-   "district": "benchmarks"
-  },
-  {
-   "path": "benchmarks/reference/speech-model-lock.json",
-   "lines": 5,
-   "kind": "data",
-   "district": "benchmarks"
-  },
-  {
-   "path": "compositions/code-to-frames/index.html",
-   "lines": 288,
-   "kind": "html",
+   "path": "compositions/_lib/sound.js",
+   "lines": 76,
+   "kind": "javascript",
    "district": "compositions"
   },
   {
@@ -166,25 +70,55 @@
   },
   {
    "path": "compositions/how-code-becomes-video/index.html",
-   "lines": 1554,
+   "lines": 1666,
+   "kind": "html",
+   "district": "compositions"
+  },
+  {
+   "path": "compositions/three-city/index.html",
+   "lines": 271,
+   "kind": "html",
+   "district": "compositions"
+  },
+  {
+   "path": "compositions/three-orbit/index.html",
+   "lines": 238,
+   "kind": "html",
+   "district": "compositions"
+  },
+  {
+   "path": "compositions/three-paper/index.html",
+   "lines": 241,
+   "kind": "html",
+   "district": "compositions"
+  },
+  {
+   "path": "compositions/three-prism/index.html",
+   "lines": 254,
+   "kind": "html",
+   "district": "compositions"
+  },
+  {
+   "path": "compositions/three-pulse/index.html",
+   "lines": 208,
+   "kind": "html",
+   "district": "compositions"
+  },
+  {
+   "path": "compositions/three-studio/index.html",
+   "lines": 233,
    "kind": "html",
    "district": "compositions"
   },
   {
    "path": "docs/AUTHORING.md",
-   "lines": 281,
-   "kind": "docs",
-   "district": "docs"
-  },
-  {
-   "path": "docs/CODEX_GOAL_HANDOFF.md",
-   "lines": 96,
+   "lines": 259,
    "kind": "docs",
    "district": "docs"
   },
   {
    "path": "docs/MEASUREMENT.md",
-   "lines": 153,
+   "lines": 156,
    "kind": "docs",
    "district": "docs"
   },
@@ -195,56 +129,44 @@
    "district": "docs"
   },
   {
-   "path": "docs/PDOOM_ENGINE.md",
-   "lines": 35,
-   "kind": "docs",
-   "district": "docs"
-  },
-  {
-   "path": "docs/PRODUCTION_SETUP.md",
-   "lines": 91,
-   "kind": "docs",
-   "district": "docs"
-  },
-  {
-   "path": "docs/REVERSE_ENGINEERING.md",
-   "lines": 84,
-   "kind": "docs",
-   "district": "docs"
-  },
-  {
-   "path": "docs/SINGLE_PROMPT.md",
-   "lines": 62,
-   "kind": "docs",
-   "district": "docs"
-  },
-  {
-   "path": "examples/atl.json",
-   "lines": 26,
-   "kind": "data",
-   "district": "examples"
-  },
-  {
-   "path": "examples/broken.json",
-   "lines": 16,
-   "kind": "data",
-   "district": "examples"
-  },
-  {
-   "path": "examples/explainer.json",
-   "lines": 35,
-   "kind": "data",
-   "district": "examples"
-  },
-  {
    "path": "examples/how-code-becomes-video.json",
-   "lines": 126,
+   "lines": 127,
    "kind": "data",
    "district": "examples"
   },
   {
-   "path": "examples/html.json",
-   "lines": 45,
+   "path": "examples/three-city.json",
+   "lines": 275,
+   "kind": "data",
+   "district": "examples"
+  },
+  {
+   "path": "examples/three-orbit.json",
+   "lines": 275,
+   "kind": "data",
+   "district": "examples"
+  },
+  {
+   "path": "examples/three-paper.json",
+   "lines": 271,
+   "kind": "data",
+   "district": "examples"
+  },
+  {
+   "path": "examples/three-prism.json",
+   "lines": 271,
+   "kind": "data",
+   "district": "examples"
+  },
+  {
+   "path": "examples/three-pulse.json",
+   "lines": 307,
+   "kind": "data",
+   "district": "examples"
+  },
+  {
+   "path": "examples/three-studio.json",
+   "lines": 279,
    "kind": "data",
    "district": "examples"
   },
@@ -255,110 +177,68 @@
    "district": "root"
   },
   {
-   "path": "requirements-production.txt",
-   "lines": 5,
-   "kind": "docs",
-   "district": "root"
-  },
-  {
    "path": "requirements.txt",
    "lines": 2,
    "kind": "docs",
    "district": "root"
   },
   {
-   "path": "scenes/broken.py",
-   "lines": 8,
-   "kind": "python",
-   "district": "scenes"
+   "path": "styles/night-blueprint.json",
+   "lines": 84,
+   "kind": "data",
+   "district": "styles"
   },
   {
-   "path": "scenes/browser.py",
-   "lines": 1,
-   "kind": "python",
-   "district": "scenes"
+   "path": "styles/paper-swiss.json",
+   "lines": 84,
+   "kind": "data",
+   "district": "styles"
   },
   {
-   "path": "scenes/editorial.py",
-   "lines": 42,
-   "kind": "python",
-   "district": "scenes"
+   "path": "styles/phosphor-terminal.json",
+   "lines": 84,
+   "kind": "data",
+   "district": "styles"
   },
   {
-   "path": "scripts/download_speech_models.py",
-   "lines": 26,
-   "kind": "python",
-   "district": "scripts"
-  },
-  {
-   "path": "scripts/one_prompt.py",
-   "lines": 57,
-   "kind": "python",
-   "district": "scripts"
-  },
-  {
-   "path": "scripts/prepare_fonts.py",
-   "lines": 43,
-   "kind": "python",
-   "district": "scripts"
-  },
-  {
-   "path": "tests/test_api_adapter.py",
-   "lines": 36,
+   "path": "tests/fakes.py",
+   "lines": 74,
    "kind": "python",
    "district": "tests"
   },
   {
    "path": "tests/test_audio.py",
-   "lines": 172,
-   "kind": "python",
-   "district": "tests"
-  },
-  {
-   "path": "tests/test_browser.py",
-   "lines": 50,
+   "lines": 145,
    "kind": "python",
    "district": "tests"
   },
   {
    "path": "tests/test_decoded_metrics.py",
-   "lines": 126,
+   "lines": 127,
    "kind": "python",
    "district": "tests"
   },
   {
    "path": "tests/test_harness.py",
-   "lines": 151,
+   "lines": 235,
    "kind": "python",
    "district": "tests"
   },
   {
    "path": "tests/test_html_backend.py",
-   "lines": 252,
-   "kind": "python",
-   "district": "tests"
-  },
-  {
-   "path": "tests/test_one_prompt.py",
-   "lines": 26,
-   "kind": "python",
-   "district": "tests"
-  },
-  {
-   "path": "tests/test_production.py",
-   "lines": 72,
+   "lines": 309,
    "kind": "python",
    "district": "tests"
   },
   {
    "path": "tests/test_signals.py",
-   "lines": 160,
+   "lines": 161,
    "kind": "python",
    "district": "tests"
   },
   {
    "path": "tests/test_tools.py",
-   "lines": 104,
+   "lines": 135,
    "kind": "python",
    "district": "tests"
   },
@@ -376,61 +256,49 @@
   },
   {
    "path": "vch/audio.py",
-   "lines": 248,
+   "lines": 119,
    "kind": "python",
    "district": "vch"
   },
   {
    "path": "vch/backends.py",
-   "lines": 109,
+   "lines": 13,
    "kind": "python",
    "district": "vch"
   },
   {
    "path": "vch/cli.py",
-   "lines": 125,
+   "lines": 115,
    "kind": "python",
    "district": "vch"
   },
   {
    "path": "vch/core.py",
-   "lines": 408,
+   "lines": 321,
    "kind": "python",
    "district": "vch"
   },
   {
    "path": "vch/evaluate.py",
-   "lines": 279,
+   "lines": 262,
    "kind": "python",
    "district": "vch"
   },
   {
    "path": "vch/html_backend.py",
-   "lines": 261,
+   "lines": 274,
    "kind": "python",
    "district": "vch"
   },
   {
    "path": "vch/html_runtime.js",
-   "lines": 270,
+   "lines": 303,
    "kind": "javascript",
    "district": "vch"
   },
   {
-   "path": "vch/narration.py",
-   "lines": 97,
-   "kind": "python",
-   "district": "vch"
-  },
-  {
    "path": "vch/pipeline.py",
-   "lines": 193,
-   "kind": "python",
-   "district": "vch"
-  },
-  {
-   "path": "vch/production.py",
-   "lines": 128,
+   "lines": 186,
    "kind": "python",
    "district": "vch"
   },
@@ -442,7 +310,7 @@
   },
   {
    "path": "vch/tools.py",
-   "lines": 336,
+   "lines": 367,
    "kind": "python",
    "district": "vch"
   }

@@ -39,10 +39,7 @@
  ],
  "brief": "8-second data clip: this repository as a city at sunset. One building per tracked text file (compositions/three-city/repo.json snapshot), height 0.25*sqrt(lines), colour by file kind, districts by folder. Low sun, long shadows, haze; windows light up at dusk; crane from street level to overview.",
  "audio": {
-  "mode": "procedural",
-  "gain": 0.8,
-  "bed": false,
-  "pad": 1.4,
+  "mode": "composition",
   "loudness_target": -16,
   "peak_ceiling_dbfs": -2
  },
@@ -52,47 +49,38 @@
   "hits": [
    {
     "t": 0.3,
-    "kind": "tick",
     "cue": "title.in"
    },
    {
     "t": 0.6,
-    "kind": "whoosh",
     "cue": "rise"
    },
    {
     "t": 2.4,
-    "kind": "impact",
     "cue": "skyline"
    },
    {
     "t": 3.0,
-    "kind": "tick",
     "cue": "caption.in"
    },
    {
     "t": 3.6,
-    "kind": "tick",
     "cue": "label.0"
    },
    {
     "t": 4.1,
-    "kind": "tick",
     "cue": "label.1"
    },
    {
     "t": 4.6,
-    "kind": "tick",
     "cue": "label.2"
    },
    {
     "t": 5.6,
-    "kind": "chime",
     "cue": "windows"
    },
    {
     "t": 7.0,
-    "kind": "impact",
     "cue": "overview"
    }
   ]
@@ -161,7 +149,7 @@
   },
   {
    "id": "AUDIO",
-   "description": "Original synthesized audio exists",
+   "description": "Sound synthesized by the composition exists",
    "kind": "hard",
    "metric": "audio_present",
    "op": "eq",

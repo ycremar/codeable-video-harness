@@ -39,10 +39,7 @@
  ],
  "brief": "8-second optics clip: a white beam enters a glass prism with physical transmission and dispersion, and leaves as a spectrum. Dark studio, orbiting camera, depth of field and bloom. Red bends least, violet most.",
  "audio": {
-  "mode": "procedural",
-  "gain": 0.8,
-  "bed": false,
-  "pad": 1.4,
+  "mode": "composition",
   "loudness_target": -16,
   "peak_ceiling_dbfs": -2
  },
@@ -52,42 +49,34 @@
   "hits": [
    {
     "t": 0.3,
-    "kind": "tick",
     "cue": "title.in"
    },
    {
     "t": 0.5,
-    "kind": "whoosh",
     "cue": "beam.on"
    },
    {
     "t": 1.6,
-    "kind": "impact",
     "cue": "beam.hit"
    },
    {
     "t": 2.0,
-    "kind": "chime",
     "cue": "spectrum.open"
    },
    {
     "t": 2.8,
-    "kind": "tick",
     "cue": "caption.in"
    },
    {
     "t": 3.4,
-    "kind": "tick",
     "cue": "label.red"
    },
    {
     "t": 3.8,
-    "kind": "tick",
     "cue": "label.violet"
    },
    {
     "t": 6.0,
-    "kind": "chime",
     "cue": "glint"
    }
   ]
@@ -156,7 +145,7 @@
   },
   {
    "id": "AUDIO",
-   "description": "Original synthesized audio exists",
+   "description": "Sound synthesized by the composition exists",
    "kind": "hard",
    "metric": "audio_present",
    "op": "eq",

@@ -5,8 +5,9 @@
 <title>Repository city</title>
 <!--
   Short three.js clip (contract: examples/three-city.json). This repository as a city at sunset: one
-  building per tracked text file (repo.json, a `git ls-files` snapshot; vendored libraries excluded),
-  grouped into districts by top-level folder. Height = 0.25 * sqrt(lines); colour = file kind.
+  building per text file in the tree to be committed (repo.json, a `git ls-files --cached --others
+  --exclude-standard` snapshot; vendored libraries and the snapshot itself excluded), grouped into
+  districts by top-level folder. Height = 0.25 * sqrt(lines); colour = file kind.
   Low sun with long shadows, haze, window lights at dusk. Everything is set from t.
 -->
 <style>
@@ -40,6 +41,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { BokehPass } from "three/addons/postprocessing/BokehPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { clamp, lerp, ease, easeOut, smooth, spring, seeded, hash, loadContract, el, show, place, maskedWords, riseWords, preview } from "/compositions/_lib/clip.js";
+import * as sound from "/compositions/_lib/sound.js";
 
 const W = 1280, H = 720;
 const vch = (window.__vch = window.__vch || {});
@@ -150,8 +152,36 @@ function buildText() {
 
 const project = (v) => { const p = v.clone().project(camera); return [(p.x + 1) / 2 * W, (1 - p.y) / 2 * H, p.z]; };
 
-function seek(t) {
+// Crane: from street level between districts up and around to an overview.
+function cameraAt(t) {
   const u = t / T.duration;
+  const a = lerp(-1.05, 0.55, u), r = lerp(13, 21, u), y = lerp(1.6, 9.5, u * u * (3 - 2 * u) * 0.8 + 0.2 * u);
+  const hit = t >= C("overview") ? 0.04 * easeOut((t - C("overview")) / 0.3) : 0;
+  camera.position.set(Math.sin(a) * r * (1 - hit), y, Math.cos(a) * r * (1 - hit));
+  camera.lookAt(0, lerp(3.2, 1.4, ease(u)), 0);
+  camera.updateMatrixWorld();
+}
+
+// Callouts go to the tallest building of three different districts whose roof stays in frame and clear
+// of the title panel while its label shows, so no leader line points at a roof the viewer cannot see.
+function pickCallouts() {
+  const panel = ([x, y]) => x < 760 && y < 300, column = ([x, y]) => x > 720 && y > 280 && y < 460;
+  const clear = (p) => p[2] < 1 && p[0] > 24 && p[0] < W - 24 && p[1] > 24 && p[1] < H - 120 && !panel(p) && !column(p);
+  const picked = [];
+  for (const f of [...DATA].sort((a, b) => b.lines - a.lines)) {
+    if (picked.some((p) => p.district === f.district)) continue;
+    const from = C(`label.${picked.length}`) + 0.3, to = T.duration - 0.05;
+    const seen = [0, 0.25, 0.5, 0.75, 1].every((s) => {
+      cameraAt(lerp(from, to, s));
+      return clear(project(new THREE.Vector3(f.x, f.h + 0.1, f.z)));
+    });
+    if (seen) picked.push(f);
+    if (picked.length === 3) break;
+  }
+  return picked;
+}
+
+function seek(t) {
   DATA.forEach((f, i) => {
     const grow = spring(t - C("rise") - f.delay, 0.6, 0.72);
     buildings[i].scale.y = Math.max(0.001, f.h * grow);
@@ -159,12 +189,7 @@ function seek(t) {
   const dusk = smooth((t - C("windows")) / 0.5);
   windowsMat.forEach((m) => { m.emissiveIntensity = 0.06 + 1.6 * dusk; });
   sun.intensity = lerp(3.2, 2.2, dusk);
-  // Crane: from street level between districts up and around to an overview.
-  const a = lerp(-1.05, 0.55, u), r = lerp(13, 21, u), y = lerp(1.6, 9.5, u * u * (3 - 2 * u) * 0.8 + 0.2 * u);
-  const hit = t >= C("overview") ? 0.04 * easeOut((t - C("overview")) / 0.3) : 0;
-  camera.position.set(Math.sin(a) * r * (1 - hit), y, Math.cos(a) * r * (1 - hit));
-  camera.lookAt(0, lerp(3.2, 1.4, ease(u)), 0);
-  camera.updateMatrixWorld();
+  cameraAt(t);
   bokeh.uniforms.focus.value = camera.position.length();
   composer.render();
 
@@ -182,17 +207,63 @@ function seek(t) {
     const x1 = lx - e.offsetWidth - 6, y1 = ly + 18, len = Math.hypot(x1 - px, y1 - py);
     rule.style.width = `${(len * easeOut((t - at) / 0.4)).toFixed(2)}px`;
     rule.style.transform = `translate(${px.toFixed(2)}px, ${py.toFixed(2)}px) rotate(${Math.atan2(y1 - py, x1 - px).toFixed(4)}rad)`;
-    rule.style.opacity = on.toFixed(3);
+    show(rule, on);
   });
   TEXT.legend.forEach((e, i) => place(e, 64 + 190 * i, H - 36 - 40, "l", smooth((t - C("caption.in") - 0.1 * i) / 0.3)));
 }
 
+// ---------- sound: urban dusk, synthesized here ----------
+// An open-fifth drone with slow beating and distant traffic as the bed; the city rises on an
+// accelerating run of wooden plucks, the skyline lands on a deep boom, windows twinkle on.
+let SOUND_HITS = [];
+const TAU = Math.PI * 2;
+const pluck = (R, f, decay = 0.18) => sound.clip(R, decay * 5, (t, i) => (i < 20 ? 0.8 * (1 - i / 20) : 0)
+  + (Math.sin(TAU * f * t) + 0.35 * Math.sin(TAU * 4 * f * t) * Math.exp(-t * 30)) * Math.exp(-t / decay));
+// A low boom builds slowly in a spectral window, so its loudest sample is a strike on top, kept
+// well under 12 kHz (onsets are analysed at 24 kHz, so anything higher is filtered out first).
+const boom = (R) => sound.clip(R, 1.4, (t, i) => (i < 72 ? 1.4 * Math.sin(i * 0.55) * (1 - i / 72) : 0)
+  + Math.sin(TAU * (48 * t + 30 * (1 - Math.exp(-t * 9)) / 9)) * Math.exp(-t * 3.2));
+const twinkle = (R, f) => sound.clip(R, 0.6, (t, i) => (i < 30 ? 1.3 * Math.sin(i * 0.7) * (1 - i / 30) : 0) + (Math.sin(TAU * f * t) + 0.3 * Math.sin(TAU * 2.76 * f * t)) * Math.exp(-t / 0.09));
+
+function synthesize({ sampleRate: R, duration }) {
+  const out = sound.stereo(R, duration), rand = sound.seeded(53), at = (name) => C(name);
+  const drone = new Float32Array(out.length), traffic = new Float32Array(out.length);
+  for (let i = 0; i < out.length; i++) {
+    const t = i / R, fade = Math.min(1, t / 0.8);
+    drone[i] = fade * (0.5 * Math.sin(TAU * 55 * t) + 0.35 * Math.sin(TAU * 82.6 * t) + 0.3 * Math.sin(TAU * 110.4 * t)
+      + 0.12 * Math.sin(TAU * 164.8 * t + Math.sin(TAU * 0.2 * t)));
+    traffic[i] = fade * (rand() * 2 - 1);
+  }
+  sound.lowpass(traffic, R, (t) => 260 + 120 * Math.sin(TAU * 0.13 * t));
+  const cues = SOUND_HITS.map((h) => h.t);
+  sound.duck(drone, R, cues, { depth: 0.6 });
+  sound.addBed(out, drone, { gain: 0.42 }); sound.addBed(out, traffic, { gain: 1.4, width: 101 });
+  sound.place(out, pluck(R, 880, 0.05), at("title.in"), { gain: 0.5, pan: -0.5 });
+  // The rise: plucks accelerate up a pentatonic scale from the cue to the skyline.
+  const scale = [220, 247.5, 277.2, 330, 370.7, 440, 495, 554.4, 660, 741.3, 880];
+  const span = at("skyline") - at("rise");
+  for (let k = 0; k < 16; k++) {
+    const u = Math.pow(k / 16, 0.65), t = at("rise") + span * u;
+    if (t > at("skyline") - 0.08) break;
+    sound.place(out, pluck(R, scale[k % scale.length]), t, { gain: k ? 0.32 : 0.75, pan: -0.6 + 1.2 * hash(k + 3) });
+  }
+  sound.place(out, boom(R), at("skyline"), { gain: 0.95 });
+  sound.place(out, pluck(R, 660, 0.05), at("caption.in"), { gain: 0.45, pan: -0.5 });
+  [523.3, 659.3, 784].forEach((f, k) => sound.place(out, pluck(R, f, 0.25), at(`label.${k}`), { gain: 0.6, pan: 0.6 }));
+  for (let k = 0; k < 9; k++) {
+    const f = [1568, 1760, 2093, 2349, 2637, 3136][k % 6];
+    sound.place(out, twinkle(R, f), at("windows") + (k ? 0.09 + 0.06 * k * (0.7 + 0.6 * hash(k + 9)) : 0), { gain: k ? 0.24 : 0.75, pan: 0.8 * (hash(k + 21) - 0.5) });
+  }
+  sound.place(out, boom(R), at("overview"), { gain: 0.8 });
+  return [out.left, out.right];
+}
+
 vch.seek = seek;
+vch.audio = synthesize;
 vch.ready = Promise.all([loadContract("/examples/three-city.json"), fetch("repo.json").then((r) => r.json())]).then(([loaded, repo]) => {
-  C = loaded.cue; T = { duration: loaded.contract.video.duration };
+  C = loaded.cue; SOUND_HITS = loaded.hits; T = { duration: loaded.contract.video.duration };
   DATA = layout(repo.files); DATA.snapshot = repo.snapshot;
-  TALL = [...DATA].sort((a, b) => b.lines - a.lines).slice(0, 3);
-  build(); buildText();
+  build(); TALL = pickCallouts(); buildText();
   if (!loaded.harness) preview(document.getElementById("stage"), W, H, T.duration, seek);
 });
 </script>

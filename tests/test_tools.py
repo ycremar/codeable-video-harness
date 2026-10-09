@@ -3,12 +3,23 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from vch.pipeline import render
-from vch.tools import compare_profiles, diversity_markdown, profile_media, render_stills, still_times, storyboard_markdown
+from PIL import Image, ImageDraw
+
+from fakes import FakeRenderer, clicks, html_project
+from vch.pipeline import _render
+from vch.tools import (compare_profiles, diversity_markdown, preview_sound, profile_media, render_stills, still_times,
+                       storyboard_markdown)
 
 ROOT = Path(__file__).resolve().parents[1]
-SCENE = 'from vch.core import Canvas\ndef render(ctx):\n c=Canvas(96,96,"#334455")\n c.draw.rectangle((5+ctx["t"]*20,30,25+ctx["t"]*20,50),fill="#EEEEEE")\n return c.finish()\n'
+CLICK_TIMES = [0.25, 0.75, 1.25, 1.75]
+
+
+def sliding_bar(t):
+    image = Image.new('RGB', (96, 96), '#334455')
+    ImageDraw.Draw(image).rectangle((5 + t * 20, 30, 25 + t * 20, 50), fill='#EEEEEE')
+    return image
 
 
 class CompareProfilesTests(unittest.TestCase):
@@ -30,32 +41,34 @@ class CompareProfilesTests(unittest.TestCase):
 
 
 class StoryboardTests(unittest.TestCase):
-    def test_storyboard_lists_scenes_beats_and_hits(self):
-        spec = json.loads((ROOT/'examples/html.json').read_text())
-        text = storyboard_markdown(spec)
-        self.assertIn('| 2 | contract | 2–4 | 4 | 2 impact, 2.5 tick, 3 tick, 3.5 tick |', text)
+    def setUp(self):
+        self.spec = json.loads((ROOT/'examples/how-code-becomes-video.json').read_text())
+
+    def test_storyboard_lists_scenes_beats_and_cues(self):
+        text = storyboard_markdown(self.spec)
+        self.assertIn('| 2 | brief | 6–12 | 12 | 6 brief.arrive, 6.5 brief.row1, 6.75 brief.row2,', text)
+        self.assertIn('audio `composition`', text)
         self.assertIn('Human `CRAFT`', text)
 
     def test_still_times(self):
-        spec = json.loads((ROOT/'examples/html.json').read_text())
-        self.assertEqual(len(still_times(spec, beats=True)), 24)
-        self.assertEqual(still_times(spec, times=[1.01]), [1.0])
-        self.assertAlmostEqual(max(still_times(spec)), 359/30)
+        self.assertEqual(len(still_times(self.spec, beats=True)), 96)
+        self.assertEqual(still_times(self.spec, times=[1.01]), [1.0])
+        self.assertAlmostEqual(max(still_times(self.spec)), 1439/30)
         with self.assertRaises(ValueError):
-            still_times(spec, times=[12.0])
+            still_times(self.spec, times=[48.0])
 
 
 @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'FFmpeg required')
-class StillsAndProfileTests(unittest.TestCase):
+class StillsSoundAndProfileTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temp = tempfile.TemporaryDirectory()
         cls.root = Path(cls.temp.name)
-        (cls.root/'scene.py').write_text(SCENE)
-        cls.spec = {'version': 1, 'title': 'tools', 'seed': 1, 'video': {'width': 96, 'height': 96, 'fps': 10, 'duration': 2},
-                    'scenes': [{'id': 'a', 'start': 0, 'end': 1, 'module': 'scene.py'},
-                               {'id': 'b', 'start': 1, 'end': 2, 'module': 'scene.py'}],
-                    'audio': {'mode': 'procedural', 'gain': 0.5, 'bed': True}, 'timing': {'bpm': 120},
+        cls.spec = {'version': 1, 'title': 'tools', 'seed': 1, **html_project(cls.root),
+                    'video': {'width': 96, 'height': 96, 'fps': 10, 'duration': 2},
+                    'scenes': [{'id': 'a', 'start': 0, 'end': 1}, {'id': 'b', 'start': 1, 'end': 2}],
+                    'audio': {'mode': 'composition'},
+                    'timing': {'bpm': 120, 'hits': [{'t': t, 'cue': f'c{i}'} for i, t in enumerate(CLICK_TIMES)]},
                     'qa': {'sample_every': 1},
                     'requirements': [{'id': 'D', 'description': 'd', 'kind': 'hard', 'metric': 'duration_s', 'op': 'eq', 'target': 2}]}
 
@@ -63,30 +76,48 @@ class StillsAndProfileTests(unittest.TestCase):
     def tearDownClass(cls):
         cls.temp.cleanup()
 
+    def renderer(self, times=CLICK_TIMES):
+        return FakeRenderer(sliding_bar, audio=clicks(times=times, duration=2))
+
+    def render(self, name):
+        return _render(self.spec, self.root, self.root/'runs'/name, self.renderer())
+
     def test_stills_sheet_and_no_overwrite(self):
         out = self.root/'stills'
-        summary = render_stills(self.spec, self.root, out, times=still_times(self.spec), trust_code=True)
-        self.assertEqual([s['scene'] for s in summary['stills']], ['a', 'a', 'b', 'b', 'b'])
-        self.assertTrue((out/'sheet.jpg').is_file())
-        self.assertEqual(json.loads((out/'stills.json').read_text())['stills'][0]['t'], 0.0)
-        with self.assertRaises(FileExistsError):
-            render_stills(self.spec, self.root, out, times=[0.0], trust_code=True)
+        with patch('vch.tools.create_renderer', return_value=self.renderer()):
+            summary = render_stills(self.spec, self.root, out, times=still_times(self.spec), trust_code=True)
+            self.assertEqual([s['scene'] for s in summary['stills']], ['a', 'a', 'b', 'b', 'b'])
+            self.assertTrue((out/'sheet.jpg').is_file())
+            self.assertEqual(json.loads((out/'stills.json').read_text())['stills'][0]['t'], 0.0)
+            with self.assertRaises(FileExistsError):
+                render_stills(self.spec, self.root, out, times=[0.0], trust_code=True)
 
     def test_stills_report_next_frame_change(self):
-        summary = render_stills(self.spec, self.root, self.root/'stills-motion', times=[0.5, 1.9], trust_code=True, motion=True)
-        moving = summary['stills'][0]['frame_change']
-        self.assertGreater(moving, 0)
+        with patch('vch.tools.create_renderer', return_value=self.renderer()):
+            summary = render_stills(self.spec, self.root, self.root/'stills-motion', times=[0.5, 1.9], trust_code=True, motion=True)
+        self.assertGreater(summary['stills'][0]['frame_change'], 0)
         self.assertNotIn('frame_change', summary['stills'][1])  # no next frame inside the film
 
+    def test_sound_preview_finds_placed_cues_and_reports_misses(self):
+        with patch('vch.tools.create_renderer', return_value=self.renderer()):
+            summary = preview_sound(self.spec, self.root, self.root/'sound', trust_code=True)
+        self.assertEqual(summary['onsets'], 4)
+        self.assertLess(summary['worst_hit_ms'], 2)
+        self.assertEqual(summary['missed'], [])
+        self.assertTrue((self.root/'sound/audio.wav').is_file())
+        with patch('vch.tools.create_renderer', return_value=self.renderer(times=CLICK_TIMES[:3])):
+            summary = preview_sound(self.spec, self.root, self.root/'sound-missing', trust_code=True)
+        self.assertEqual([h['cue'] for h in summary['missed']], ['c3'])
+
     def test_diversity_of_a_render_with_itself_is_zero(self):
-        run = render(self.spec, self.root, self.root/'runs/diverse', True)
+        run = self.render('diverse')
         table = diversity_markdown([run, run/'video.mp4'])
         self.assertIn('| diverse | 0.00 | 0.00 |', table)
         with self.assertRaises(ValueError):
             diversity_markdown([run])
 
-    def test_profile_of_a_render_recovers_tempo_and_frames(self):
-        run = render(self.spec, self.root, self.root/'runs/profiled', True)
+    def test_profile_of_a_render_recovers_onsets_and_frames(self):
+        run = self.render('profiled')
         profile = profile_media(run/'video.mp4', self.root/'profile')
         self.assertAlmostEqual(profile['video']['duration_s'], 2.0, delta=0.05)
         self.assertEqual(len(profile['audio']['onsets']), 4)

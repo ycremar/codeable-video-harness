@@ -3,16 +3,17 @@ import unittest
 
 import numpy as np
 
+from fakes import click
 from vch import signals
-from vch.audio import SAMPLE_RATE, hit_sound, place
+from vch.audio import SAMPLE_RATE, place
 
 RATE = signals.ANALYSIS_SAMPLE_RATE
 
 
-def click_track(times, seconds, kind='tick'):
+def click_track(times, seconds):
     track = np.zeros(int(RATE * seconds))
     for t in times:
-        place(track, hit_sound(kind, rate=RATE), at=t, align='peak', rate=RATE)
+        place(track, click(RATE), at=t, align='peak', rate=RATE)
     return track
 
 

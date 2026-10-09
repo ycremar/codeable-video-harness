@@ -40,7 +40,7 @@ missing OCR language, non-finite value or stale review stays unmeasured/blocked.
 | max_static_hold_s | Longest run of decoded frames whose mean luma change is < `still_delta` (0.5/255) | Slow drifts count as still; deliberate holds need explicit `exclude` windows frozen in the contract |
 | single_frame_pops | Decoded frames that differ from **both** neighbours by ≥ `floor` (8/255) and > `ratio` (3×) the neighbours' mutual difference | Intentional flash frames count; cuts do not. Exclude deliberate flashes explicitly |
 | loop_seam_ratio | Last→first decoded-frame change relative to neighbouring frame steps (0 = identical) | Meaningful only for loops; not perceived loop smoothness |
-| audio_hit_sync_ms | Max distance from each declared `timing.hits` time to a detected transient peak in the encoded audio | Onsets are not attributed to sources (a bed hit can satisfy a cue); soft sounds may be missed and then fail |
+| audio_hit_sync_ms | Max distance from each declared `timing.hits` time to a detected transient peak in the encoded audio: spectral-flux peaks at 24 kHz, each reported at its loudest nearby sample (method in AUTHORING.md) | Onsets are not attributed to sources (a bed hit can satisfy a cue); soft or purely tonal attacks may be missed and then fail; says nothing about whether the sound suits its cue |
 
 ## Turning a vague requirement into a defensible contract
 
@@ -66,8 +66,7 @@ closed. Changes to evaluators require owner review, not the candidate-author age
 
 To integrate another engine, produce the same video, trace, samples and manifest
 contract, then supply a frame adapter for determinism tests. Do not assume its
-telemetry is trustworthy merely because it matches this JSON shape. The pdoom primitive adapter now produces this evidence through the same
-pipeline; it does not claim full upstream Engine integration.
+telemetry is trustworthy merely because it matches this JSON shape.
 
 ## Preventing evaluation gaming
 
@@ -142,12 +141,16 @@ apart at the median (0.82 at p10, 2.02 at p90).
 Use it to check that variants differ, or that a set of films is not one house style. It measures
 spread, not quality, taste or brand fit, and it does not see layout, motion or sound.
 
-## Production evidence additions
+## Sound evidence
 
-All of these are explicitly proxies: `planned_scene_count` counts declared windows;
-`planned_visual_kinds` counts declared mechanisms (not perceived variety);
-`narration_seconds` sums independently synthesized phrase placements (not ASR);
-`caption_timing_error_ms` compares captions with those placements (not pronunciation
-or word alignment). Missing evidence remains unmeasured. Counts cannot establish
-reference similarity. The source manifest also binds executing harness/adapter code
-when candidate projects live in separate production-session directories.
+The harness ships no sounds. With `audio.mode: "composition"` the page's own `window.__vch.audio`
+supplies the samples. The run records what it received in `evidence.json` (`audio_render`):
+
+- channel count and a SHA-256 fingerprint of the float samples;
+- the mastering gain, and whether the peak ceiling limited it;
+- the sample peak after gain.
+
+Mastering is one linear gain, with no limiter or compressor. A ceiling can therefore stop a loudness
+target from being reached, and the encoded loudness check then fails openly. `mix` runs record each
+layer's path, hash, placement and peak offset instead; `file` runs record the path. Loudness, true
+peak and cue sync are always measured on the encoded AAC audio, not on the WAV.

@@ -18,8 +18,7 @@ METRIC_TYPES = {
     'black_fraction':'proxy','text_present':'proxy','text_absent':'proxy',
     'minimum_text_size_px':'proxy','minimum_contrast':'proxy','safe_area_violations':'proxy',
     'minimum_text_hold_s':'proxy','beat_cut_error_ms':'proxy','motion_fraction':'proxy',
-    'ocr_contains':'proxy','planned_scene_count':'proxy','planned_visual_kinds':'proxy',
-    'narration_seconds':'proxy','caption_timing_error_ms':'proxy',
+    'ocr_contains':'proxy',
     'integrated_loudness_lufs':'hard','true_peak_dbtp':'hard','encoded_frame_count':'hard',
     'frame_timestamp_jitter_ms':'hard','text_overlap_violations':'proxy','max_static_hold_s':'proxy',
     'single_frame_pops':'proxy','loop_seam_ratio':'proxy','audio_hit_sync_ms':'proxy'
@@ -115,22 +114,6 @@ def measure(metric, params, spec, evidence, trace, out):
         return _motion_metric(metric, params, spec, evidence)
     if metric == 'audio_hit_sync_ms':
         return _hit_sync(spec, evidence)
-    if metric == 'planned_scene_count':
-        return len(spec['scenes']), 'declared timeline windows, not detected cuts or narrative quality'
-    if metric == 'planned_visual_kinds':
-        kinds={s.get('params',{}).get('kind') for s in spec['scenes']}
-        kinds.discard(None)
-        if not kinds:raise ValueError('No declared visual mechanisms')
-        return len(kinds), 'declared mechanisms; repeated code paths may look similar, inspect actual output'
-    if metric == 'narration_seconds':
-        cues=evidence.get('narration',{}).get('phrases',[])
-        if not cues:raise ValueError('Missing synthesized speech timing evidence')
-        return sum(c['end']-c['start'] for c in cues), 'sum of separately synthesized phrase durations; not ASR or speech quality'
-    if metric == 'caption_timing_error_ms':
-        cues=evidence.get('narration',{}).get('phrases',[]);captions=spec.get('captions',[])
-        if not cues or len(cues)!=len(captions):raise ValueError('Missing/mismatched caption and speech timing')
-        if any(c['text']!=d['text'] for c,d in zip(cues,captions)):raise ValueError('Caption text differs from synthesis script')
-        return max(abs(c[k]-d[k])*1000 for c,d in zip(cues,captions) for k in ('start','end')), 'caption vs synthesized phrase placement; no forced alignment or pronunciation validation'
     v = next(x for x in evidence['probe']['streams'] if x['codec_type']=='video')
     if metric == 'duration_s': return float(v['duration']), 'ffprobe: encoded video stream'
     if metric in ('width_px','height_px'): return v[metric.split('_')[0]], 'ffprobe: encoded video stream'

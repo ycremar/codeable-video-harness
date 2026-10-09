@@ -266,5 +266,38 @@
     return { elements: collect() };
   }
 
-  Object.defineProperty(window, '__vchHarness', { value: Object.freeze({ frame, collect }), writable: false, configurable: false });
+  // Composition-authored sound: window.__vch.audio({ sampleRate, duration, channels }) returns one or two
+  // Float32Arrays of exactly round(sampleRate * duration) samples. They travel back as base64 float32 chunks.
+  const AUDIO_CHUNK_BYTES = 3 * 262144;
+  async function audio(sampleRate, duration) {
+    const api = window.__vch || {};
+    if (api.ready && typeof api.ready.then === 'function') await api.ready;
+    if (typeof api.audio !== 'function') {
+      throw new Error("audio.mode 'composition' needs window.__vch.audio({ sampleRate, duration, channels })");
+    }
+    const result = await api.audio({ sampleRate, duration, channels: 2 });
+    const channels = Array.isArray(result) ? result : [result];
+    const length = Math.round(sampleRate * duration);
+    if (!channels.length || channels.length > 2 || !channels.every((c) => c instanceof Float32Array && c.length === length)) {
+      throw new Error(`window.__vch.audio must return 1 or 2 Float32Arrays of ${length} samples`);
+    }
+    const interleaved = new Float32Array(length * channels.length);
+    for (let i = 0; i < length; i++) {
+      for (let c = 0; c < channels.length; c++) {
+        const value = channels[c][i];
+        if (!Number.isFinite(value)) throw new Error(`Non-finite audio sample at ${i}`);
+        interleaved[i * channels.length + c] = value;
+      }
+    }
+    const bytes = new Uint8Array(interleaved.buffer), chunks = [];
+    for (let i = 0; i < bytes.length; i += AUDIO_CHUNK_BYTES) {
+      const part = bytes.subarray(i, i + AUDIO_CHUNK_BYTES);
+      let text = '';
+      for (let j = 0; j < part.length; j += 0x8000) text += String.fromCharCode.apply(null, part.subarray(j, j + 0x8000));
+      chunks.push(btoa(text));
+    }
+    return { channels: channels.length, chunks };
+  }
+
+  Object.defineProperty(window, '__vchHarness', { value: Object.freeze({ frame, collect, audio }), writable: false, configurable: false });
 })();

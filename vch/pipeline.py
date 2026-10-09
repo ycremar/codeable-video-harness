@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 import numpy as np
 from PIL import Image, ImageDraw
-from .core import SceneRenderer, canonical, digest, source_manifest, contained
+from .core import canonical, digest, source_manifest, contained
 from .audio import render_audio
 from . import signals
 
@@ -20,11 +20,6 @@ def command(args, **kwargs):
 
 def probe(path):
     return json.loads(command(['ffprobe', '-v', 'error', '-show_streams', '-show_format', '-of', 'json', str(path)]).stdout)
-
-
-def make_audio(spec, root, out):
-    """Audio path for a run (None when silent); see vch.audio for placement and mastering."""
-    return render_audio(spec, root, out)[0]
 
 
 def sample_times(spec):
@@ -88,7 +83,7 @@ def _render(spec, root, out, renderer):
     before = source_manifest(root, spec)
     out.mkdir(parents=True)
     (out/'contract.json').write_text(json.dumps(spec, ensure_ascii=False, indent=2))
-    audio, audio_render = render_audio(spec, root, out)
+    audio, audio_render = render_audio(spec, root, out, renderer)
     v = spec['video']; fps = v['fps']; n = round(v['duration']*fps)
     args = ['ffmpeg','-y','-v','error','-f','rawvideo','-pix_fmt','rgb24','-s',f"{v['width']}x{v['height']}",'-r',str(fps),'-i','-']
     if audio:
@@ -153,8 +148,6 @@ def _render(spec, root, out, renderer):
     contact_sheet([(out/x['file'], f"t={x['t']:.3f}s") for x in samples], out/'contact-sheet.jpg', v['width'], v['height'])
     evidence = {'samples': samples, 'determinism_mismatches': differences, 'sampling': 'boundaries + midpoint + periodic; not exhaustive perception',
                 'probe': probe(out/'video.mp4')}
-    if spec.get('narration_metadata'):
-        evidence['narration'] = json.loads(contained(root,spec['narration_metadata']).read_text())
     evidence.update(decoded_evidence(out/'video.mp4', spec, evidence['probe']))
     if audio_render:
         evidence['audio_render'] = audio_render
@@ -166,7 +159,7 @@ def _render(spec, root, out, renderer):
                             'ffmpeg': command(['ffmpeg','-version']).stdout.decode().splitlines()[0]},
                 'model': {'provider':'unverified/not invoked','model_id':None},
                 'audio': spec.get('audio',{'mode':'none'})}
-    manifest['runtime']['renderer'] = getattr(renderer, 'provenance', {'name':'Pillow'})
+    manifest['runtime']['renderer'] = getattr(renderer, 'provenance', {'name': type(renderer).__name__})
     binding = {k:manifest[k] for k in ('source','video_sha256','trace_sha256','evidence_sha256','contract_sha256')}
     manifest['review_binding'] = hashlib.sha256(canonical(binding).encode()).hexdigest()
     (out/'manifest.json').write_text(json.dumps(manifest,indent=2))

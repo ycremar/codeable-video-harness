@@ -1,11 +1,11 @@
-"""Contract validation, instrumented scene API and deterministic time math.
+"""Contract validation, provenance hashing and deterministic time math.
 
-Python scene plugins are executable code, NOT sandboxed. Only load reviewed code.
-This API does not pretend scene-supplied telemetry proves decoded visual semantics.
+A contract freezes what a film must satisfy before anything is rendered. Compositions are
+agent-written HTML/JS that the html backend executes in Chromium; nothing here prescribes how a
+film looks or sounds.
 """
 from __future__ import annotations
 import hashlib
-import importlib.util
 import json
 import math
 import os
@@ -13,12 +13,13 @@ import re
 from pathlib import Path
 from dataclasses import dataclass, field
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont, ImageColor
+from PIL import Image
 
-BACKENDS = ("pillow", "pdoom", "html")
-AUDIO_MODES = ("none", "procedural", "file", "mix")
-HIT_KINDS = ("tick", "impact", "chime", "whoosh")
+BACKENDS = ("html",)
+# "composition": the composition synthesizes its own audio in code (window.__vch.audio).
+AUDIO_MODES = ("none", "file", "mix", "composition")
 MAX_HITS = 2000
+MAX_LABEL_CHARS = 80
 MAX_STYLE_BYTES = 64 * 1024
 STYLE_MODES = ("dark", "light")
 HEX_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
@@ -56,13 +57,17 @@ def finite(x):
 
 
 def normalized_hits(timing):
-    """Declared sync hits as [{'t': seconds, 'kind': name}], sorted by time."""
+    """Declared sync points as [{'t': seconds, 'cue': name or None, 'kind': label or None}], sorted by time.
+
+    A hit marks a moment that must carry an audible transient. Its name and label are the author's;
+    the harness attaches no sound to them.
+    """
     hits = []
     for hit in timing.get("hits", []):
         if isinstance(hit, dict):
-            hits.append({"t": hit.get("t"), "kind": hit.get("kind", "tick")})
+            hits.append({"t": hit.get("t"), "cue": hit.get("cue"), "kind": hit.get("kind")})
         else:
-            hits.append({"t": hit, "kind": "tick"})
+            hits.append({"t": hit, "cue": None, "kind": None})
     return sorted(hits, key=lambda h: h["t"] if finite(h["t"]) else math.inf)
 
 
@@ -70,11 +75,17 @@ def _validate_hits(timing, duration):
     raw = timing.get("hits", [])
     if not isinstance(raw, list) or len(raw) > MAX_HITS:
         raise ValueError(f"timing.hits must be a list of at most {MAX_HITS} entries")
+    names = set()
     for hit in normalized_hits(timing):
         if not finite(hit["t"]) or not 0 <= hit["t"] < duration:
             raise ValueError("Every timing hit needs a finite time inside [0, duration)")
-        if hit["kind"] not in HIT_KINDS:
-            raise ValueError(f"Hit kind must be one of {', '.join(HIT_KINDS)}")
+        for key in ("cue", "kind"):
+            if hit[key] is not None and (not isinstance(hit[key], str) or not 0 < len(hit[key]) <= MAX_LABEL_CHARS):
+                raise ValueError(f"timing.hits {key} must be a short string")
+        if hit["cue"] is not None:
+            if hit["cue"] in names:
+                raise ValueError(f"Duplicate cue name: {hit['cue']}")
+            names.add(hit["cue"])
 
 
 def _validate_mastering(audio):
@@ -90,20 +101,13 @@ def _validate_audio(audio, assets, duration):
     declared = {a["path"] for a in assets}
     mode = audio["mode"]
     if mode not in AUDIO_MODES:
-        raise ValueError("Unknown audio mode")
+        raise ValueError(f"audio.mode must be one of {', '.join(AUDIO_MODES)}")
     if mode == "file" and audio["path"] not in declared:
         raise ValueError("Audio file must be declared as a licensed asset")
-    if mode == "procedural":
-        if not finite(audio.get("gain")) or not 0 <= audio["gain"] <= .9:
-            raise ValueError("Procedural gain must be 0..0.9")
-        if type(audio.get("bed", True)) is not bool:
-            raise ValueError("audio.bed must be true or false")
-        if not finite(audio.get("pad", 0)) or not 0 <= audio.get("pad", 0) <= 2:
-            raise ValueError("audio.pad (sustained chord bed level relative to cue hits) must be 0..2")
     if mode == "mix":
         layers = audio.get("layers", [])
-        if not isinstance(layers, list) or not layers and not audio.get("procedural_hits"):
-            raise ValueError("Mix audio needs layers or procedural_hits")
+        if not isinstance(layers, list) or not layers:
+            raise ValueError("Mix audio needs at least one layer")
         for layer in layers:
             if layer.get("path") not in declared:
                 raise ValueError("Every mix layer must be a declared, licensed asset")
@@ -113,7 +117,7 @@ def _validate_audio(audio, assets, duration):
                 raise ValueError("Mix layer align must be 'start' or 'peak'")
             if not finite(layer.get("gain_db", 0)) or not -60 <= layer.get("gain_db", 0) <= 12:
                 raise ValueError("Mix layer gain_db must be -60..12")
-    if mode in ("procedural", "mix"):
+    if mode in ("mix", "composition"):
         _validate_mastering(audio)
 
 
@@ -177,11 +181,8 @@ def validate(s, root):
         raise ValueError("Unsupported contract version")
     if "style" in s:
         s["style"] = resolve_style(s["style"], root)
-    backend = s.get('backend', 'pillow')
-    if backend not in BACKENDS:
-        raise ValueError('Unknown renderer backend')
-    if s.get('backend') == 'pdoom' and s.get('render',{}).get('samples',1) != 1:
-        raise ValueError('pdoom primitive adapter currently supports one temporal sample only')
+    if s.get("backend") not in BACKENDS:
+        raise ValueError("backend must be 'html': a composition that renders any moment from t")
     v = s["video"]
     for k in ("width", "height", "fps"):
         if type(v[k]) is not int or v[k] <= 0:
@@ -224,9 +225,6 @@ def validate(s, root):
         for t in (a, b):
             if abs(t*v["fps"] - round(t*v["fps"])) > 1e-7:
                 raise ValueError("Scene boundaries must fall on frame boundaries")
-        # HTML compositions render from html.entry; a scene module is optional metadata there.
-        if (backend != "html" or "module" in scene) and not contained(root, scene["module"]).is_file():
-            raise ValueError("Missing scene module")
         end = b
     if abs(end-v["duration"]) > 1e-8:
         raise ValueError("Scene coverage must equal duration")
@@ -249,8 +247,7 @@ def validate(s, root):
     if not finite(timing.get("beat_offset", 0)):
         raise ValueError("Beat offset must be finite")
     _validate_hits(timing, v["duration"])
-    if backend == "html":
-        _validate_html(s, root)
+    _validate_html(s, root)
     interval = s.get("qa", {}).get("sample_every", 1.)
     if not finite(interval) or interval < 1/v["fps"]:
         raise ValueError("QA sample interval must be finite and at least one frame")
@@ -273,7 +270,7 @@ def load_contract(path):
 def source_manifest(root, spec):
     # Hash all project code/prompts/assets, not only imported entry points.
     # No secrets or source bytes are copied into the report.
-    excluded = {".git", "runs", ".venv", "__pycache__", "reference-inputs", "node_modules", "dist", "models"}
+    excluded = {".git", "runs", ".venv", "__pycache__", "node_modules", "dist"}
     files = {}
     for current,dirs,names in os.walk(root):
         dirs[:] = sorted(d for d in dirs if d not in excluded and not d.endswith('.egg-info'))
@@ -283,26 +280,13 @@ def source_manifest(root, spec):
             files[str(p.relative_to(root))]=digest(p)
     # Bind the executing harness too, even when an author project is staged elsewhere.
     implementation={};base=Path(__file__).resolve().parents[1]
-    for folder in [base/'vch',base/'backends/pdoom']:
-        if not folder.exists():continue
+    for folder in [base/'vch']:
         for current,dirs,names in os.walk(folder):
             dirs[:]=sorted(d for d in dirs if d not in excluded)
             for name in sorted(names):
                 p=Path(current)/name
-                if p.suffix in ('.py','.ts','.js','.json','.html'):implementation[str(p.relative_to(base))]=digest(p)
+                if p.suffix in ('.py','.js','.json','.html'):implementation[str(p.relative_to(base))]=digest(p)
     return {"contract": hashlib.sha256(canonical(spec).encode()).hexdigest(), "files": files, 'implementation':implementation}
-
-
-def luminance(color):
-    rgb = ImageColor.getrgb(color)[:3]
-    c = [v/255 for v in rgb]
-    c = [v/12.92 if v <= .04045 else ((v+.055)/1.055)**2.4 for v in c]
-    return .2126*c[0]+.7152*c[1]+.0722*c[2]
-
-
-def contrast(a, b):
-    x, y = sorted((luminance(a), luminance(b)))
-    return (y+.05)/(x+.05)
 
 
 def contrast_rgb(a, b):
@@ -331,78 +315,7 @@ def temporal_average(render_at, t, scene, settings, fps):
     return Image.fromarray(np.clip(np.rint(srgb*255), 0, 255).astype('uint8'))
 
 
-def ease(p):
-    p = min(1, max(0, p))
-    return p*p*(3-2*p)
-
-
-def noise(seed, key):
-    """Stateless keyed randomness; never dependent on invocation order."""
-    raw = hashlib.sha256(f"{seed}:{key}".encode()).digest()[:8]
-    return int.from_bytes(raw, "big") / 2**64
-
-
 @dataclass
 class Frame:
     image: Image.Image
     elements: list = field(default_factory=list)
-
-
-class Canvas:
-    """Instrumented primitives; bounds are measured by the actual font rasterizer.
-
-    Contrast is against the declared backing color, NOT arbitrary overlapping art.
-    Declared telemetry is a proxy: decoded evidence still needs visual review.
-    """
-    def __init__(self, width, height, bg):
-        self.image = Image.new("RGB", (width, height), bg)
-        self.draw = ImageDraw.Draw(self.image)
-        self.bg, self.elements = bg, []
-
-    def text(self, element_id, xy, text, font_path, size, fill, background=None):
-        font = ImageFont.truetype(str(font_path), size)
-        bbox = self.draw.textbbox(xy, text, font=font, anchor="lt")
-        self.draw.text(xy, text, font=font, anchor="lt", fill=fill)
-        self.elements.append({"id": element_id, "type": "text", "text": text,
-                              "bbox": list(bbox), "size": size,
-                              "contrast": contrast(fill, background or self.bg)})
-
-    def finish(self):
-        return Frame(self.image, self.elements)
-
-
-class SceneRenderer:
-    def __init__(self, spec, root, trust_code=False):
-        if not trust_code:
-            raise PermissionError("Scene plugins execute Python. Review code and use --trust-scene-code.")
-        self.spec, self.root, self.modules = spec, Path(root), {}
-        for scene in spec["scenes"]:
-            path = contained(root, scene["module"])
-            if str(path) not in self.modules:
-                ms = importlib.util.spec_from_file_location("vch_scene_"+digest(path)[:12], path)
-                module = importlib.util.module_from_spec(ms)
-                ms.loader.exec_module(module)
-                self.modules[str(path)] = module
-
-    def render(self, t):
-        duration = self.spec["video"]["duration"]
-        if not finite(t) or not 0 <= t < duration:
-            raise ValueError("Timestamp outside [0,duration)")
-        scene = next(x for x in self.spec["scenes"] if x["start"] <= t < x["end"])
-        module = self.modules[str(contained(self.root, scene["module"]))]
-        ctx = {"root": self.root, "spec": self.spec, "scene": scene, "t": t,
-               "local_t": t-scene["start"], "progress": (t-scene["start"])/(scene["end"]-scene["start"]),
-               "seed": self.spec["seed"]}
-        result = module.render(ctx)
-        w, h = self.spec["video"]["width"], self.spec["video"]["height"]
-        if not isinstance(result, Frame) or result.image.size != (w, h) or result.image.mode != "RGB":
-            raise ValueError("Scene must return Frame with contract-size RGB pixels")
-        return result
-
-    def sampled(self, t):
-        settings, fps = self.spec.get("render", {}), self.spec["video"]["fps"]
-        if settings.get("samples", 1) == 1:
-            return self.render(t)
-        scene = next(x for x in self.spec["scenes"] if x["start"] <= t < x["end"])
-        image = temporal_average(lambda st: self.render(st).image, t, scene, settings, fps)
-        return Frame(image, self.render(t).elements)

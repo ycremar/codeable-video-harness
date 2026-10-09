@@ -2,8 +2,8 @@
 
 Study date: 2026-10-06. Sources: the [skillry Opus 5.5 collection](https://skillry.dev/ai-videos/opus-5-5/)
 and the requested entry [@mattworkman](https://skillry.dev/ai-videos/opus-5-5/mattworkman-309357).
-This complements [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md), which covers the original
-screen recording that motivated the harness.
+The screen recording that first motivated the harness, and the renderers built from it, are no longer
+part of this repository.
 
 ## Scope, method and evidence labels
 
@@ -206,7 +206,7 @@ cue-level audio placement, and much more explicit verification habits.
 | Text telemetry for HTML | Visible DOM/SVG text with rendered size, clip/mask awareness, opacity, colour, pixel-backed contrast and `text-group`s | proxy |
 | "Render one frame per beat first" | `vch stills --beats`, `--times`; sheet plus overlap and size warnings | preview only |
 | Storyboard before code | `vch storyboard` | planning aid |
-| "A sound on every hit" | `timing.hits` plus original synthesized cues, placed by measured peak | — |
+| "A sound on every hit" | `timing.hits` as the cue sheet; each composition synthesizes its own sounds in code (`window.__vch.audio`) and places them by peak; the harness masters and measures | — |
 | SFX "placed by measured peak, not file start" | `audio.mode: "mix"` layers with `align: "peak"`; linear `loudness_target` with a peak ceiling (no limiter) | — |
 | "Loudnorm −14 LUFS, re-measured after encode" | `integrated_loudness_lufs`, `true_peak_dbtp` on the encoded file | hard |
 | "Verify evenly spaced timestamps; no duplicated end frame" | `frame_timestamp_jitter_ms`, `encoded_frame_count` | hard |
@@ -218,10 +218,10 @@ cue-level audio placement, and much more explicit verification habits.
 | Analyse a song or reference | `vch profile` (pacing, cuts, holds, pops, loudness, onsets, tempo and phase) | measurement of an input |
 | Skills as the knowledge layer | `.claude/skills/codeable-video/SKILL.md` | — |
 | "Make it as rich as this reference" | `vch profile` detail proxies + `vch profile-compare` | measurement of inputs |
-| Whooshes on transitions; a music bed under cues | `whoosh` cue kind (tonal riser, peak at landing); `audio.pad` chord bed ducked under cues | — |
+| "Check the audio numerically before the full render" | `vch sound` (loudness, true peak and per-cue sync on the WAV) | preview only |
 | "Every hold must keep moving" | `vch stills --motion` (next-frame change at the dead-time analysis size) | preview only |
 
-Two determinism defects surfaced while building the example (`examples/html.json`). Both were
+Two determinism defects surfaced while building the first HTML example (since removed). Both were
 caught by the existing forward/reverse/shuffled seek check:
 
 1. **The composition cached its headline DOM between frames.** In some seek orders, frames
@@ -236,12 +236,11 @@ Neither was fixed by loosening a threshold.
 Not implemented:
 
 - Remotion or HyperFrames runtimes, and HyperFrames `data-start` clip semantics.
-- Generative image, video, music or TTS APIs, beyond the existing local Kokoro narration.
+- Generative image, video, music or TTS APIs.
 - A limiter or compressor.
 - Multi-format variants from one source.
 - Seeking helpers for media elements.
-- An automated vision-model critique loop. The production loop's author inspection already
-  exists, and remains a self-attestation.
+- An automated vision-model critique loop.
 
 Human craft review stays human.
 
@@ -278,7 +277,7 @@ vocabulary in the table: glow, lighting, shadows, grain and texture.
 **Matching the requested video's density.** `vch profile` now reports detail proxies, and
 `vch profile-compare` puts two profiles side by side. Measured on decoded files (**Observed**):
 
-| Proxy | Requested video | Previous 12 s example | `how-code-becomes-video` |
+| Proxy | Requested video | Previous 12 s example (since removed) | `how-code-becomes-video` |
 |---|---|---|---|
 | Edge density, median | 0.088 | 0.051 | 0.104 |
 | Frame grid in use, median | 59% | 40% | 61% |
@@ -311,9 +310,10 @@ representative frames, so these describe a still, not motion):
 | Colourfulness (Hasler–Süsstrunk) | p10 8, median 31, p90 83 |
 | Pairwise style distance (`vch diversity`) | p10 0.82, median 1.34, p90 2.02 |
 
-**Where our films sat before style packs.** The first example is lighter than 91% of the corpus,
-with an almost single-colour palette (3rd percentile). The 48-second explainer is darker than 97%
-of the corpus and mostly azure. They sit at the two extremes, chosen by the author, not by the brief.
+**Where our films sat before style packs.** The first example (since removed) was lighter than 91%
+of the corpus, with an almost single-colour palette (3rd percentile). The 48-second explainer is
+darker than 97% of the corpus and mostly azure. The two sat at opposite extremes, chosen by the
+author, not by the brief.
 
 **What prompts name** (**Stated**; 513 prompts):
 

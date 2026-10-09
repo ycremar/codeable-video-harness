@@ -4,8 +4,6 @@ __pycache__/
 *.egg-info/
 runs/
 .env
-reference-inputs/
 assets/fonts/NotoSerifSC.ttf
 node_modules/
 dist/
-models/

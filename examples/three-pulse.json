@@ -39,10 +39,7 @@
  ],
  "brief": "8-second music clip: 720 instanced blocks on a dark reflective floor; every cue in timing.hits launches a ripple (closed-form ring wave), so picture and sound share one cue sheet. Neon emissive by height, strong bloom, fog, low sweeping camera.",
  "audio": {
-  "mode": "procedural",
-  "gain": 0.8,
-  "bed": false,
-  "pad": 1.4,
+  "mode": "composition",
   "loudness_target": -16,
   "peak_ceiling_dbfs": -2
  },
@@ -52,87 +49,70 @@
   "hits": [
    {
     "t": 0.25,
-    "kind": "tick",
     "cue": "title.in"
    },
    {
     "t": 0.5,
-    "kind": "tick",
     "cue": "beat.1"
    },
    {
     "t": 1.0,
-    "kind": "impact",
     "cue": "beat.2"
    },
    {
     "t": 1.5,
-    "kind": "tick",
     "cue": "beat.3"
    },
    {
     "t": 2.0,
-    "kind": "impact",
     "cue": "beat.4"
    },
    {
     "t": 2.25,
-    "kind": "tick",
     "cue": "caption.in"
    },
    {
     "t": 2.5,
-    "kind": "tick",
     "cue": "beat.5"
    },
    {
     "t": 3.0,
-    "kind": "impact",
     "cue": "beat.6"
    },
    {
     "t": 3.5,
-    "kind": "tick",
     "cue": "beat.7"
    },
    {
     "t": 4.0,
-    "kind": "chime",
     "cue": "beat.8"
    },
    {
     "t": 4.5,
-    "kind": "tick",
     "cue": "beat.9"
    },
    {
     "t": 5.0,
-    "kind": "impact",
     "cue": "beat.10"
    },
    {
     "t": 5.5,
-    "kind": "tick",
     "cue": "beat.11"
    },
    {
     "t": 6.0,
-    "kind": "whoosh",
     "cue": "beat.12"
    },
    {
     "t": 6.5,
-    "kind": "tick",
     "cue": "beat.13"
    },
    {
     "t": 7.0,
-    "kind": "impact",
     "cue": "beat.14"
    },
    {
     "t": 7.5,
-    "kind": "tick",
     "cue": "beat.15"
    }
   ]
@@ -201,7 +181,7 @@
   },
   {
    "id": "AUDIO",
-   "description": "Original synthesized audio exists",
+   "description": "Sound synthesized by the composition exists",
    "kind": "hard",
    "metric": "audio_present",
    "op": "eq",

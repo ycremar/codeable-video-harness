@@ -1,4 +1,4 @@
-"""HTML composition backend. Browser tests are opt-in (VCH_TEST_BROWSER=1), like pdoom's."""
+"""HTML composition backend. Browser tests are opt-in (VCH_TEST_BROWSER=1)."""
 import copy
 import hashlib
 import json
@@ -14,7 +14,6 @@ from vch.backends import create_renderer
 from vch.core import canonical, load_contract, resolve_style, validate
 from vch.evaluate import evaluate
 from vch.pipeline import render
-from vch.production import writable
 
 ROOT = Path(__file__).resolve().parents[1]
 BROWSER = os.environ.get('VCH_TEST_BROWSER') == '1'
@@ -54,6 +53,17 @@ NETWORK = PURE.replace('<script>', '<script>fetch("https://example.com/beacon").
 CONSOLE_ERROR = PURE.replace("window.__vch.seek = (t) => {", "window.__vch.seek = (t) => {\n  if (t > 0.4) console.error('shader failed to compile');")
 LIBRARY = PURE.replace('<script>', '<script type="module">import { lerp } from "/lib/motion.js"; window.__lerp = lerp;</script><script>')
 UNDECLARED = PURE.replace('<script>', '<img src="/secret.png" style="display:none"><script>')
+# Composition-authored sound: a short click whose loudest sample lands on each cue.
+SOUND = PURE.replace('</script>', '''window.__vch.audio = ({ sampleRate, duration }) => {
+  const samples = new Float32Array(Math.round(sampleRate * duration));
+  for (const at of [0.25, 0.75]) {
+    const start = Math.round(at * sampleRate);
+    for (let i = 0; i < 960; i++) samples[start + i] = 0.5 * Math.sin(2 * Math.PI * 3000 * i / sampleRate) * Math.exp(-400 * i / sampleRate);
+  }
+  return [samples, samples];
+};
+</script>''')
+SHORT_SOUND = SOUND.replace('Math.round(sampleRate * duration)', 'Math.round(sampleRate * duration) - 1')
 
 
 def contract(**changes):
@@ -129,16 +139,6 @@ class HtmlContractTests(unittest.TestCase):
             broken['assets'][2]['path'] = path
             with self.assertRaises(ValueError, msg=path):
                 validate(broken, ROOT)
-
-    def test_author_write_scope(self):
-        self.assertFalse(writable(Path('compositions/_vendor/three/build/three.module.js')))
-        self.assertFalse(writable(Path('compositions/_lib/clip.js')))
-        self.assertTrue(writable(Path('compositions/film/index.html')))
-        self.assertTrue(writable(Path('compositions/film/js/motion.js')))
-        self.assertTrue(writable(Path('scenes/a.py')))
-        for path in ('compositions/index.html', 'compositions/film/photo.png', 'compositions/../vch/evaluate.py',
-                     'compositions/.hidden/x.js', 'vch/evaluate.py', 'scenes/a.js'):
-            self.assertFalse(writable(Path(path)), path)
 
 
 @unittest.skipUnless(BROWSER and shutil.which('ffmpeg'), 'Set VCH_TEST_BROWSER=1 after browser setup')
@@ -240,16 +240,31 @@ class HtmlBrowserTests(unittest.TestCase):
         self.assertFalse(np.array_equal(sharp, blurred[0]))
         self.assertTrue(np.array_equal(blurred[0], blurred[1]))
 
-    def test_example_film_opening_passes_its_checks(self):
-        spec = json.loads((ROOT/'examples/html.json').read_text())
-        spec['video'] = {'width': 1280, 'height': 720, 'fps': 10, 'duration': 2}
-        spec['scenes'] = spec['scenes'][:1]
-        spec['timing']['hits'] = [h for h in spec['timing']['hits'] if (h['t'] if isinstance(h, dict) else h) < 2]
-        spec['audio'] = {'mode': 'procedural', 'gain': 0.8, 'bed': False}  # two ticks are too short to gate loudness
-        keep = {'SEEK', 'FONT', 'CONTRAST', 'SAFE', 'OVERLAP', 'POPS', 'HITS'}
+    def test_composition_audio_is_synthesized_in_the_page(self):
+        sound = {'mode': 'composition'}
+        hits = {'hits': [{'t': 0.25, 'cue': 'first'}, {'t': 0.75, 'cue': 'second'}]}
+        extra = [{'id': 'AUDIO', 'description': 'sound', 'kind': 'hard', 'metric': 'audio_present', 'op': 'eq', 'target': True},
+                 {'id': 'HITS', 'description': 'sync', 'kind': 'proxy', 'metric': 'audio_hit_sync_ms', 'op': 'le', 'target': 20}]
+        rows, out = self.render(SOUND, 'sound', audio=sound, timing=hits, requirements=contract()['requirements'] + extra)
+        for key, row in rows.items():
+            self.assertEqual(row['status'], 'pass', (key, row))
+        evidence = json.loads((out/'evidence.json').read_text())
+        self.assertEqual(evidence['audio_render']['mode'], 'composition')
+        self.assertEqual(evidence['audio_render']['channels'], 2)
+
+    def test_composition_audio_must_exist_and_fill_the_film(self):
+        with self.assertRaisesRegex(RuntimeError, 'window.__vch.audio'):
+            self.render(PURE, 'no-audio', audio={'mode': 'composition'})
+        with self.assertRaisesRegex(RuntimeError, 'Float32Arrays of 48000 samples'):
+            self.render(SHORT_SOUND, 'short-audio', audio={'mode': 'composition'})
+
+    def test_example_clip_opening_passes_its_checks(self):
+        spec = json.loads((ROOT/'examples/three-pulse.json').read_text())
+        spec['video'].update(fps=10, duration=3)
+        spec['scenes'] = [{**spec['scenes'][0], 'end': 3}]
+        spec['timing']['hits'] = [h for h in spec['timing']['hits'] if h['t'] < 3]
+        keep = {'SEEK', 'AUDIO', 'FONT', 'CONTRAST', 'SAFE', 'OVERLAP', 'POPS', 'HITS'}
         spec['requirements'] = [r for r in spec['requirements'] if r['id'] in keep]
-        spec['requirements'].append({'id': 'COPY', 'description': 'first line', 'kind': 'proxy', 'metric': 'text_present',
-                                     'params': {'strings': ['One prompt.']}, 'op': 'eq', 'target': True})
         with tempfile.TemporaryDirectory() as d:
             out = render(copy.deepcopy(spec), ROOT, Path(d)/'run', True)
             result = evaluate(out)

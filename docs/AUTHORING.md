@@ -1,65 +1,46 @@
-# Opus/GPT authoring protocol
+# Authoring protocol
+
+Nothing in this repository is a template. The example films show that the loop works; their look,
+structure, motion and sound belong to them. Invent each film's own for its brief. This document
+fixes only what makes a film correct and measurable: how a composition must behave so that its
+frames and sounds can be checked.
 
 ## Input packet
 
-Use `python -m vch packet examples/explainer.json` with either coding agent.
-Include the following brief fields (do not let missing facts be invented):
+Use `python -m vch packet <contract>` with any coding agent. Include the following brief fields (do
+not let missing facts be invented):
 
 - Goal, audience, distribution placement and call to action.
 - Verified facts and prohibited/unconfirmed claims, with source URLs/dates.
 - Target dimensions, duration, fps and platform-specific safe region.
-- Tone and visual direction **for this project**, not the reference video.
+- Tone and visual direction **for this project**, not a reference video's or an example's.
 - Available real assets with rights, brand mark and fonts.
-- Narration script/music rights or explicit silence/procedural-audio choice.
+- Sound: silence, sound synthesized by the composition, or licensed music/voice/effects with rights.
 - Hard acceptance checks, candidate proxies, human rubrics and reviewer.
 - Resource/cost ceiling and maximum repair attempts.
 
 ## Authoring prompt
 
-“Read AGENTS.md and this contract. Propose a short scene/timing plan that maps every
-requirement ID to visual/audio evidence. Implement only the scene/assets scope.
-Keep the requirements and evaluator unchanged. Do not copy the reference's style.
-Render representative stills, inspect them, then run and evaluate the actual MP4.
-For each failure, explain and patch the concrete cause, up to three iterations.
-Return artifact paths, real commands, remaining failures and unmeasured items.
-Leave designated human reviews pending. Do not claim a provider/model choice
-unless your runtime exposes it.”
+“Read AGENTS.md and this contract. Propose a short timing plan that maps every requirement ID to
+visual/audio evidence. Implement only the composition/assets scope. Keep the requirements and
+evaluator unchanged. Do not copy a reference's or an example's style or sound. Render representative
+stills and preview the sound, inspect them, then run and evaluate the actual MP4. For each failure,
+explain and patch the concrete cause, up to three iterations. Return artifact paths, real commands,
+remaining failures and unmeasured items. Leave designated human reviews pending. Do not claim a
+provider/model choice unless your runtime exposes it.”
 
-## Scene contract
+## Compositions (`backend: "html"`)
 
-`render(ctx) -> Frame(image, elements)`; `ctx` includes global/local time, scene
-progress, explicit seed, scene parameters, project root and full contract.
-
-Use `Canvas.text` for instrumented typography. Other artwork may use arbitrary
-Pillow geometry or a separately reviewed engine returning an RGB PIL image.
-`elements` is a trace, not a rendering command list: keep it honest and complete.
-The renderer does not require any particular composition or palette.
-
-Seeded variation uses `noise(seed, key)`. All motion is computed from time. A
-particle trajectory should be analytically evaluated or deterministically rebuilt,
-not advanced from whichever frame happened to be rendered previously.
-
-Scene windows are frame-aligned, ordered and contiguous in v1. Overlapping
-transitions must be authored inside a scene; arbitrary cross-scene overlap is
-rejected. Full frame pixels are returned, never drawn incrementally onto old frames.
-
-Fixed subframe samples average in linear light. Sample times are clipped to the
-scene boundary to avoid bleeding across cuts. More samples cost more compute;
-adaptive GPU sampling and general stateful simulations are not implemented.
-
-## HTML compositions (`backend: "html"`)
-
-This is the medium most code-rendered launch films use: HTML, CSS, SVG, Canvas or WebGL (GSAP
-and Three.js are common) that exposes a pure `seek(t)`. See
-[OPUS_VIDEO_RESEARCH.md](OPUS_VIDEO_RESEARCH.md). Declare:
+A composition is a web page (HTML, CSS, SVG, Canvas or WebGL, with any library you vendor) that
+draws any moment from `t`. See [OPUS_VIDEO_RESEARCH.md](OPUS_VIDEO_RESEARCH.md) for how public
+code-rendered films are made this way. Declare:
 
 ```json
 "backend": "html", "html": {"entry": "compositions/<name>/index.html"}
 ```
 
-Scenes still declare contiguous windows; `module` is optional. Windows drive sampling,
-beat-grid and storyboard checks. Example: `examples/html.json` →
-`compositions/code-to-frames/index.html`.
+Scenes declare contiguous, frame-aligned windows. They drive sampling, beat-grid and storyboard
+checks; they do not limit what the page draws.
 
 **Seek protocol.** Define `window.__vch.seek = (t) => { … }`, or `window.seek`. It may be async,
 and must set every visual property from `t`. Optionally:
@@ -75,47 +56,127 @@ and must set every visual property from `t`. Optionally:
 - Virtual clocks: `performance.now`, `Date` and rAF timestamps all equal composition time.
 - A seeded `Math.random` per page load.
 
-**Rules.** Most come from failures recorded in the corpus or caught by this harness.
+**Sound protocol.** With `"audio": {"mode": "composition"}`, define
+`window.__vch.audio = ({ sampleRate, duration, channels }) => [left, right]`. Return one or two
+`Float32Array`s of exactly `round(sampleRate × duration)` samples. It is called once, after
+`ready` and before any frame. Its output must depend only on the contract and a seed. The harness
+then does four things:
+
+- applies one linear gain toward `loudness_target` that never exceeds `peak_ceiling_dbfs`;
+- rejects clipping;
+- writes the WAV and fingerprints the samples into the evidence;
+- measures the encoded AAC audio.
+
+`timing.hits` is the cue sheet: times and names, plus an optional `kind` that is only the author's
+own label. What sounds at a cue is the composition's decision. `compositions/_lib/sound.js` holds mechanics only: buffers, placing a sound by its peak,
+panning, a one-pole low-pass, ducking and adding a bed. It has no instruments. The alternatives
+are `mix`, which places declared, licensed files by start or measured peak, and `file`, a single
+licensed track.
+
+## Correctness rules
+
+These come from failures that the checks caught. They constrain behaviour, not style.
 
 - **No state carried between frames.** That includes timers, accumulators and DOM caches keyed on
-  the previous frame. The forward/reverse/shuffled seek check compares pixels *and* telemetry. The
-  example's first full render failed it on a cached headline.
-- **Closed-form springs.** Sum one step response per target change. Snap settled springs to their
-  target.
-- **Outgoing text leaves before incoming text occupies its space** (`text_overlap_violations`).
-  Masked reveals should start fully hidden (≥120% translate). Text that is 15% or more visible
-  counts as visible.
-- **Wipes and floods take at least ~0.3 s.** Never switch a label's colour before its backing has
-  actually changed. Fade labels across the wipe instead.
+  the previous frame. The forward/reverse/shuffled seek check compares pixels *and* telemetry.
+- **Motion is closed-form in `t`.** For example, a spring is a sum of step responses, snapped to its
+  target once settled. Never integrate from whichever frame was drawn before.
+- **Set per-frame state before using it.** A clip once set `camera.up` *after* `lookAt`, so each
+  frame used the previous frame's up vector.
+- **Render inside `seek(t)`.** Never call `setAnimationLoop`. Build seeded geometry, textures and
+  particles once in `ready`.
+- **Elements whose opacity changes get their own compositor layer** (`will-change: opacity`;
+  `show()` in `compositions/_lib/clip.js` does this). Otherwise Chromium may merge a just-shown
+  element into a neighbour's layer, or keep it separate, depending on the previous frame. The same
+  `t` then renders with 1-level differences depending on seek order. This was measured over a
+  semi-transparent overlay.
+- **Shader errors fail the run.** WebGL reports compile failures only to the console, so a broken
+  material renders black without a page error. The backend treats `console.error` like a page error.
 - **Package everything locally.** Fonts, images and libraries are declared assets or composition
   files. Any non-local request (for example a Google Fonts `@import`) blocks the render. Media inside
-  the composition folder must be declared assets with source and licence.
+  the composition folder must be declared with source and licence. A folder asset is a path ending
+  in `/`. `compositions/_vendor/three/` is declared that way, and an import map points at it.
 - **Text drawn into Canvas/WebGL is pixels, not telemetry.** Report it in `window.__vch.elements`
   if a requirement depends on it.
 - **Mark semantic text blocks with `data-vch-id`.** This gives stable IDs for hold checks, and
   `text-group` observations, so a line split into word spans still matches copy checks.
+- **Bind on-screen numbers to their sources at load time** (`/contract.json`, the page's own source,
+  a data file), so a count cannot drift from the thing it counts.
 - **Footage:** pre-extract image sequences, or encode all-intra, and swap frames inside `seek(t)`.
   `<video>` seeking is not managed for you.
+- **Post-processing tone-maps the whole frame.** With three.js `EffectComposer` and `OutputPass`, a
+  material's `toneMapped: false` does not exempt it. Author colours that must stay true in linear
+  light.
 
-**Preview** without the harness: serve the repository root (`python -m http.server`) and open the
-composition. The example loops on the wall clock when `__vch.harness` is absent.
+## What the checks see
 
-**Capture details:**
+Knowing how a proxy measures avoids designing toward it by accident:
 
-- Chromium runs headless with its sandbox on. Set `VCH_CHROMIUM_NO_SANDBOX=1` only in containers
-  that require it.
-- WebGL uses software SwiftShader.
-- Partial re-raster is disabled because it made clip-edge pixels depend on the previous frame.
-- 2D canvas is rasterised on the CPU. On the GPU, a page's first draw of a path could differ from
-  later draws of the same path (3 pixels, ±7 levels), which makes frames depend on seek history.
-- Frames are captured as lossless PNG with Chromium's fast compression setting: identical pixels,
-  about 2.5x faster than Playwright's screenshot call.
-- `render.samples` (1..16) blends sub-frames in linear light for motion blur.
+- **Overlap.** Text that is 15% or more visible counts as visible. Outgoing and incoming text in
+  the same space at the same time count as overlapping.
+- **Contrast** is measured on settled observations: at least 95% of the element's own peak opacity.
+  It compares the text with the median non-text pixel inside its box.
+  - A label that is still fading in when its container leaves never settles.
+  - Artwork that passes behind text becomes its backing.
+  - A label whose colour switches before its backing changes is measured against the old backing.
+- **Safe area** counts every frame, so an entrance that overshoots a margin counts.
+- **Dead time:** a decoded frame whose mean luma change is below 0.5/255 counts as still. Slow
+  drifts over smooth, softly lit scenes measured 0.1–0.3/255. Animated grain changes every pixel and
+  would fake motion; do not use it to pass. What changes on screen is the film's decision.
+- **Pops:** a one-frame flash or flood counts. Deliberate flashes need an `exclude` window frozen in
+  the contract.
 
-## Dense explainers
+## Sound the cue check can hear
 
-`examples/how-code-becomes-video.json` (48 s, 1080p) was built to match the information density
-of a reference explainer. Measure the reference and your candidate with the same proxies before
+`audio_hit_sync_ms` works in three steps:
+
+1. It mixes the encoded audio to mono at 24 kHz and computes log-spectral flux (1024-sample FFT,
+   128-sample hop).
+2. It keeps flux peaks that exceed their ±0.25 s median by 0.07 of the film's maximum flux. Each
+   peak is reported at the loudest sample from 10 ms before its flux frame to 60 ms after the
+   frame's centre. Peaks less than 50 ms apart merge, keeping the stronger.
+3. Each cue's error is its distance to the nearest reported peak.
+
+These constraints, learned building the current films, follow from that method. They say nothing
+about what a film should sound like:
+
+- **The loudest sample near a cue must be the cue's own attack.** A body that swells, overlapping
+  partials that sum later, or a bed's low-frequency swing within 60 ms moves the measured time.
+  Place each sound by its peak (`align: "peak"`, or `place()` in `sound.js`), not by its first
+  sample.
+- **Pure tones carry little flux.** A tonal onset can go undetected next to noisy ones. A few ms of
+  broadband contact at the attack makes it detectable.
+- **Content above 12 kHz is gone** in the 24 kHz analysis. An attack made only of it is invisible.
+- **Steps and swells mask cues.**
+  - A bed that steps in at t = 0 sets the film's maximum flux and hides later cues; fade it in.
+  - A noise swell that crescendos into its cue leaves no flux rise at the cue; end it shortly before.
+- **Beds compete with cues.** Duck a bed under cue times, or keep its peaks below the attacks. Low
+  notes cost peak level but add little K-weighted loudness, so a bass-heavy bed pulls the loudness
+  target and the peak ceiling against each other. There is no limiter.
+
+`vch sound` measures all of this on the WAV in seconds, before a full render.
+
+## Preview loop before the full render
+
+```sh
+python -m vch storyboard <contract>                       # timestamped plan from the contract
+python -m vch stills <contract> --beats --out runs/<name>-stills-001 --trust-scene-code
+python -m vch stills <contract> --times 0,2.5,6.2 --motion --out runs/<name>-stills-002 --trust-scene-code
+python -m vch sound <contract> --out runs/<name>-sound-001 --trust-scene-code
+```
+
+- `--motion` also renders each still's next frame and reports their change at the size
+  `max_static_hold_s` analyses. Values under 0.5/255 count as still.
+- Look at `sheet.jpg`. `stills.json` lists the text, overlaps and smallest size for each still.
+- `sound.json` gives loudness, true peak, the error for every cue, and cues missed by more than
+  20 ms.
+
+These are measurements from before encoding. Only `vch run` produces decoded evidence. Do not edit
+project files while `vch run` renders: the source check invalidates the run.
+
+## Comparing with a reference
+
+When a brief points at a reference ("as rich as this"), measure both with the same proxies before
 judging by eye:
 
 ```sh
@@ -124,144 +185,35 @@ python -m vch profile runs/<name>-NNN/video.mp4 --out runs/<name>-NNN-profile
 python -m vch profile-compare runs/ref-profile/profile.json runs/<name>-NNN-profile/profile.json
 ```
 
-Edge density and grid coverage are detail proxies, not information. What added information in that
-film:
+Edge density and grid coverage are detail proxies, not information, and a profile is not a licence
+to copy the reference's style.
 
-- **One world, one camera, no hard cuts.** Stations sit along a line, and a card travels between
-  them. Panels float above the line and move with it, so every transition comes from the previous
-  state.
-- **A persistent HUD.** A live `t`/frame readout and a station rail say where the viewer is.
-- **Each station has a kicker, a headline, a one-line description and a mechanism.** The mechanism
-  shows the process working with real data. Examples: this film's own requirements sorted into
-  bins, its own `seek(t)` source and a seek preview, its own cue sheet with a playhead, and
-  measured corpus files as dots.
-- **Numbers are bound to their sources at load time.** The film reads `/contract.json`, its own
-  source and a data file, so a count on screen cannot drift from the thing it counts.
-- **Self-render miniatures** (`drawWorld(ctx, t)` into a small canvas) show the film's own frames
-  in previews, filmstrips and a closing contact sheet. They are pure, so caching them is safe.
+## three.js
 
-Timing rules learned from its failed checks:
-
-- **Give every label at least ~1 s fully visible before the camera leaves.** A label that is still
-  fading in when its panel fades out never settles. The contrast check then measures it
-  half-transparent.
-- **Flying artwork must not pass behind text.** Its colour becomes the text's backing.
-- **Entrances that start at a safe-area margin must not overshoot.** Use ease-out there, not an
-  underdamped spring.
-- **Composite a panel as a unit** (draw it into its own canvas, then place it once with the panel's
-  alpha). Otherwise an inner `globalAlpha = 1` pops its contents ahead of the fade.
-- **A closing hold still needs motion.** The finale's slow drift failed `max_static_hold_s`. A
-  moving highlight over the contact sheet fixed it, without excluding the window.
-
-**Finishing without fake motion.** Flat vector art reads as lit when bright parts bleed light.
-That film thresholds its canvas by contrast, blurs it at quarter size and adds it back. Panels get
-a glass gradient, a rim highlight and a soft shadow on the main canvas, and lit gates cast pools
-of light. The grain texture is fixed. Animated grain changes every pixel on every frame, which the
-dead-time proxy would read as motion. Generative enhancement of stills (for example Magnific) is a
-paid, generative step outside this harness. If you use one, declare it, keep its inputs and
-outputs, and leave a human review of what it changed.
-
-## Real 3D with three.js
-
-Six short clips (8 s, 720p) in `compositions/three-*` show physically lit 3D under the same checks as
-everything else:
-
-- **prism:** glass transmission and dispersion.
-- **studio:** softboxes and contact shadows.
-- **city:** this repository's files at sunset.
-- **orbit:** planet, atmosphere and station.
-- **pulse:** 720 instanced blocks driven by the cue sheet.
-- **paper:** extruded paper layers in parallax.
-
-Each has an `examples/three-<name>.json` contract.
-
-- **Libraries are vendored and declared once.** `compositions/_vendor/three/` holds unmodified
-  three r186 files, declared as one folder asset with its MIT licence. A path ending in `/` declares
-  a folder. An import map points `three` and `three/addons/` at it. `compositions/_lib/clip.js`
-  holds the shared pure-time helpers. Authors cannot write either folder (`_`-prefixed folders sit
-  outside the author write scope).
-- **Render inside `seek(t)`.** Set transforms from `t`, then call `composer.render()`. Never call
-  `setAnimationLoop`. Seeded geometry, textures and particles are built once in `ready`.
-- **Order matters inside a frame.** Pulse's first render failed the seek check because it set
-  `camera.up` *after* `lookAt`, so each frame used the previous frame's up vector.
-- **Shader errors fail the run.** WebGL reports compile failures only to the console, so a broken
-  material renders black without a page error. The backend treats `console.error` like a page error.
-- **Post-processing tone-maps the whole frame.** With `EffectComposer` and `OutputPass`, a
-  material's `toneMapped: false` does not exempt it. Author sky colours in linear light, and pick
-  Neutral tone mapping when colours must stay true.
-- **Calm scenes still need state changes.** Smooth, light scenes measured 0.1–0.3/255 per frame
-  under slow camera moves. Each clip makes its subject the change instead: lights switching on one
-  at a time, a practical light, the sun clearing a limb, push-ins on cues.
-- **Text over 3D needs its own backing.** Spectrum labels on bloom, a title overrunning its panel
-  and a kicker over a drifting cloud all failed contrast once. Give text over moving 3D a backing
-  sized from the text, or keep it off the busy side of the frame.
-- **Cost:** with SwiftShader, an 8-second clip renders and is fully checked in 50–140 s, including
+- With SwiftShader, an 8-second 720p clip renders and is fully checked in 50–140 s. That includes
   4× MSAA, bloom, depth of field and soft shadows.
+- The vendored copy is unmodified three r186. Authors cannot write `_`-prefixed folders.
 
 ## Style packs
 
-Style is an input, not something baked into a composition. A contract may carry `style`: an
-object, or a project-relative path to a JSON pack in `styles/`. The pack is inlined when the contract
-loads, so the run's `contract.json` records the exact tokens it used. Override it per run without
-editing the contract:
+Style can be an input instead of something baked into a composition. A contract may carry
+`style`: an object, or a project-relative path to a JSON pack in `styles/`. The pack is inlined when
+the contract loads, so the run's `contract.json` records the exact tokens it used. Override it per
+run without editing the contract:
 
 ```sh
-python -m vch run examples/how-code-becomes-video.json --style styles/paper-swiss.json --out runs/hc-paper-001 --trust-scene-code
-python -m vch diversity runs/hc-001 runs/hc-paper-001 runs/hc-terminal-001
+python -m vch run <contract> --style styles/<pack>.json --out runs/<name>-<pack>-001 --trust-scene-code
+python -m vch diversity runs/<name>-001 runs/<name>-<pack>-001
 ```
 
-A pack names colours by role and also sets type and finish:
-
-- **Colour roles:** five signal colours (`accent`, `second`, `third`, `fourth`, `alert`), text inks
-  (`ink`, `soft`, `dim`, `note`), and surfaces (`bg`, `sky`, `panel`, `well`, `lane`, `grid`, …).
-- **`type`:** display/text/mono families, which must be declared font assets, plus sizes, weights
-  and a wrap scale.
-- **`finish`:** bloom, fixed grain, fixed scanlines, vignette, glow, shadow and shading factors.
-- **`mode: light`** switches the blend modes. Additive light (bloom, beams) only works on dark
-  backgrounds.
-
-The harness validates `mode` and `#RRGGBB` values; everything else is the composition's contract
-with its packs. `compositions/how-code-becomes-video` reads every colour, family and finish from
-`contract.style`. It ships three original packs: `night-blueprint` (the default), `paper-swiss` and
-`phosphor-terminal`.
-
-What re-skinning taught:
-
-- **A colour that passes as a fill may fail as text.** Paper's first red measured 3.7:1 where the
-  vignette sat behind it. Text on fills picks whichever of the pack's two inks contrasts more.
-- **Font metrics change with the pack.** Give long labels a wrap width. One monospace label ran past
-  the safe area.
-- **Light styles need their own motion cues.** Glows that read on navy vanish on paper, so make
-  state changes geometric (a jump, a scale), not luminous.
-- **A pack changes the surface, not the structure.** Layout, camera, motion grammar and sound
-  carry as much of a style as colour does, and they are still authored per composition.
-
-## Audio cues and bed
-
-- **Hit kinds:** `tick`, `impact`, `chime` and `whoosh`. A whoosh is a 0.42 s tonal riser that
-  lands on an impact, so placing it by its peak puts the swell before the cue. It is tonal because
-  broadband noise raises spectral flux on every hop and hid the landing from onset detection.
-- **`audio.pad`** (0..2, relative to cue level) adds an original sustained chord bed. The bed dips
-  by 70% from 50 ms before each cue, so each cue's own peak stays the loudest sample, which is what
-  `audio_hit_sync_ms` measures. It recovers over 0.5 s so the bed's return does not read as a new
-  transient.
-- With `pad: 1.4` and a −2 dBFS ceiling, a 74-cue mix reaches about −16 LUFS without a limiter.
-
-## Preview loop before the full render
-
-```sh
-python -m vch storyboard examples/html.json                 # timestamped plan from the contract
-python -m vch stills examples/html.json --beats --out runs/stills-001 --trust-scene-code
-python -m vch stills examples/html.json --times 0,2.5,6.2 --out runs/stills-002 --trust-scene-code
-python -m vch stills examples/html.json --times 3.1,7.4 --motion --out runs/stills-003 --trust-scene-code
-```
-
-`--motion` also renders each still's next frame and reports their change at the size
-`max_static_hold_s` analyses. Values under 0.5/255 count as still. Check a long hold this way
-before paying for a full render.
-
-Look at `sheet.jpg`. `stills.json` lists the text, overlaps and smallest size for each still.
-These are raw frames from before encoding. Only `vch run` produces decoded evidence.
+- The harness validates `mode` (`dark` or `light`) and `#RRGGBB` values. Everything else is between a
+  composition and its packs.
+- `compositions/how-code-becomes-video` reads colour roles, families and finish from
+  `contract.style`.
+- A pack changes the surface, not the structure. Layout, camera, motion and sound are authored per
+  composition.
+- Every pack must pass the same checks. A colour that passes as a fill may fail as text, and a wider
+  font can push a label past the safe area.
 
 ## Brief sections → contract evidence
 
@@ -274,19 +226,19 @@ Effective corpus briefs share a shape. Map each section to something checkable, 
 | "A new idea every 1.5–2 s", "no dead time" | `max_static_hold_s` (exclude deliberate holds explicitly) |
 | "Labels never overlap during a morph" | `text_overlap_violations` |
 | Readable copy at pace | `minimum_text_size_px`, `minimum_text_hold_s`, `minimum_contrast`; human review at normal speed |
-| "A sound on every hit", SFX on events | `timing.hits` (+ `audio.mode: "mix"` with `align: "peak"`); `audio_hit_sync_ms` |
+| "A sound on every hit", SFX on events | `timing.hits` plus composition sound or `mix` layers placed by peak; `audio_hit_sync_ms` |
 | "−14 LUFS, −1 dBTP after encode" | `integrated_loudness_lufs`, `true_peak_dbtp` |
 | "Last frame = first frame" | `loop_seam_ratio` |
 | "No single-frame pops" | `single_frame_pops` |
 | Real product only, no invented numbers | `text_present` / `text_absent` plus a human truth review |
-| Transitions that "come from" the previous scene, taste, brand fit | human rubric with timestamps; no proxy stands in |
+| Transitions that "come from" the previous scene, taste, brand fit, how it sounds | human rubric with timestamps; no proxy stands in |
 | "Show me the storyboard / beat map before code" | `vch storyboard` / `vch stills`; record approval as a human requirement |
 
 ## Review ladder
 
-1. Validate contract, rights and module paths.
-2. Inspect a few stills before paying for full render time.
-3. Render actual MP4 and all-frame text trace.
+1. Validate the contract, rights and the composition entry.
+2. Inspect a few stills and preview the sound before paying for full render time.
+3. Render the actual MP4 and the all-frame text trace.
 4. Run objective checks and proxies; inspect failures and decoded frames.
 5. Watch full motion and listen to sound; static contact sheets cannot replace this.
 6. Record review decisions against the manifest binding, citing timestamps.
@@ -297,22 +249,11 @@ leave those review criteria pending. “The encoder exited 0” is not perceptua
 
 ## Cloud / security
 
-No local desktop or signed-in browser is required for this implementation. It runs
-as a finite CPU job. Persist outputs after the job. The Docker recipe is provided
-for portability; a successful direct Python run does not prove the Docker image
-was built or tested.
+No local desktop or signed-in browser is required. A render is a finite CPU job: headless Chromium
+with its sandbox on (`VCH_CHROMIUM_NO_SANDBOX=1` only where a container requires it), loopback-only
+networking, then FFmpeg. Persist outputs after the job. The Docker recipe is provided for
+portability; a successful direct Python run does not prove the Docker image was built or tested.
 
-Do not put secrets in the project. Run untrusted generated code in a separate
-disposable VM/container. A project-path check cannot contain arbitrary Python
-imports or side effects. CPU/memory/time budgets should be enforced by the job
-runner. No external LLM generation loop is automatically invoked by the CLI.
-
-## Single-prompt production
-
-See SINGLE_PROMPT.md for the author command/replay protocol. The production loop
-freezes requirements, records the initial prompt and every response, rejects
-unauthorized writes, renders immutable attempts, and requests an artifact-bound
-agent inspection before finishing a live-author run. This inspection is a
-self-attestation and cannot satisfy a human-review gate. The browser backend uses
-declarative scene descriptions; its supported visual mechanisms are a vocabulary,
-not evidence that a new subject has been understood.
+Do not put secrets in the project. `--trust-scene-code` is an acknowledgement, not a sandbox: run
+untrusted generated compositions in a separate disposable VM/container. CPU/memory/time budgets
+should be enforced by the job runner. The CLI calls no model and no generation API.

@@ -39,10 +39,7 @@
  ],
  "brief": "8-second product shot: one fabric-and-metal object on a seamless paper cove. Key, fill and rim softboxes switch on one at a time over a soft contact shadow; turntable move, shallow depth of field. Light theme.",
  "audio": {
-  "mode": "procedural",
-  "gain": 0.8,
-  "bed": false,
-  "pad": 1.4,
+  "mode": "composition",
   "loudness_target": -16,
   "peak_ceiling_dbfs": -2
  },
@@ -52,52 +49,42 @@
   "hits": [
    {
     "t": 0.3,
-    "kind": "tick",
     "cue": "title.in"
    },
    {
     "t": 0.6,
-    "kind": "impact",
     "cue": "light.key"
    },
    {
     "t": 2.0,
-    "kind": "impact",
     "cue": "light.fill"
    },
    {
     "t": 3.4,
-    "kind": "impact",
     "cue": "light.rim"
    },
    {
     "t": 3.8,
-    "kind": "tick",
     "cue": "caption.in"
    },
    {
     "t": 4.8,
-    "kind": "chime",
     "cue": "ring.on"
    },
    {
     "t": 5.3,
-    "kind": "tick",
     "cue": "label.fabric"
    },
    {
     "t": 5.8,
-    "kind": "tick",
     "cue": "label.metal"
    },
    {
     "t": 6.2,
-    "kind": "chime",
     "cue": "ring.pulse"
    },
    {
     "t": 7.6,
-    "kind": "whoosh",
     "cue": "turn.start"
    }
   ]
@@ -166,7 +153,7 @@
   },
   {
    "id": "AUDIO",
-   "description": "Original synthesized audio exists",
+   "description": "Sound synthesized by the composition exists",
    "kind": "hard",
    "metric": "audio_present",
    "op": "eq",

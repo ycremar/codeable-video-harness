@@ -39,10 +39,7 @@
  ],
  "brief": "8-second papercraft clip: six extruded paper ridges in daylight cast soft shadows on one another; a paper sun rises between the far sheets; paper birds flap across; a gust sways the sheets. Depth from parallax (sideways truck), soft shadows and depth of field.",
  "audio": {
-  "mode": "procedural",
-  "gain": 0.8,
-  "bed": false,
-  "pad": 1.4,
+  "mode": "composition",
   "loudness_target": -16,
   "peak_ceiling_dbfs": -2
  },
@@ -52,42 +49,34 @@
   "hits": [
    {
     "t": 0.3,
-    "kind": "tick",
     "cue": "title.in"
    },
    {
     "t": 0.6,
-    "kind": "whoosh",
     "cue": "truck"
    },
    {
     "t": 1.8,
-    "kind": "chime",
     "cue": "sun.up"
    },
    {
     "t": 2.6,
-    "kind": "tick",
     "cue": "caption.in"
    },
    {
     "t": 3.6,
-    "kind": "tick",
     "cue": "birds"
    },
    {
     "t": 4.8,
-    "kind": "impact",
     "cue": "gust"
    },
    {
     "t": 6.0,
-    "kind": "chime",
     "cue": "sun.high"
    },
    {
     "t": 7.2,
-    "kind": "whoosh",
     "cue": "settle"
    }
   ]
@@ -156,7 +145,7 @@
   },
   {
    "id": "AUDIO",
-   "description": "Original synthesized audio exists",
+   "description": "Sound synthesized by the composition exists",
    "kind": "hard",
    "metric": "audio_present",
    "op": "eq",

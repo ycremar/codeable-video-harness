@@ -218,6 +218,17 @@ class HtmlRenderer:
         self._raise_problems()
         return result["elements"]
 
+    def audio(self, rate: int) -> np.ndarray:
+        """Samples from window.__vch.audio as (frames, channels) float32; synthesized once, before any frame."""
+        duration = self.spec["video"]["duration"]
+        try:
+            result = self.page.evaluate("([r, d]) => window.__vchHarness.audio(r, d)", [rate, duration])
+        except self.PlaywrightError as exc:
+            raise RuntimeError(f"Composition audio failed: {exc}") from exc
+        self._raise_problems()
+        raw = b"".join(base64.b64decode(chunk) for chunk in result["chunks"])
+        return np.frombuffer(raw, dtype="<f4").reshape(-1, result["channels"])
+
     def _capture(self) -> Image.Image:
         # Lossless PNG with Chromium's fast zlib settings: pixel-identical to page.screenshot, about 2.5x faster.
         v = self.spec["video"]

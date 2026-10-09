@@ -14,7 +14,7 @@
 
   Numbers on screen come from three sources, loaded once before the first frame:
     /contract.json  requirements, cue sheet (timing.hits, which also times the picture), loudness target
-    this file       its own line count and the seek(t) excerpt shown in station 02
+    this file       its own line count, the seek(t) excerpt shown in station 02, and every sound
     corpus.json     aggregates of docs/OPUS_VIDEO_RESEARCH.md (38 measured files, numbers only)
 
   Preview without the harness: serve the repository root (python -m http.server) and open
@@ -97,7 +97,7 @@
     Object.assign(C, { ink: c.ink, soft: c.soft, dim: c.dim, accent: c.accent, second: c.second, third: c.third, fourth: c.fourth,
                        alert: c.alert, edge: c.edge, well: c.well, lane: c.lane });
     Object.assign(KIND_COLOR, { hard: c.second, proxy: c.accent, human: c.fourth });
-    Object.assign(CUE_COLOR, { whoosh: c.third, impact: c.alert, chime: c.fourth, tick: c.accent });
+    Object.assign(CUE_COLOR, { land: c.third, stamp: c.alert, glass: c.fourth, bead: c.accent });
     Object.assign(CATEGORY_COLOR, { motion: c.second, interactive: c.third, explainer: c.accent, "3D": c.fourth });
     const vars = { "--bg": c.bg, "--ink": c.ink, "--soft": c.soft, "--dim": c.dim, "--note": c.note, "--accent": c.accent,
                    "--on-fill": onFill(c.accent), "--code": c.code, "--keyword": c.keyword, "--call": c.second,
@@ -151,7 +151,7 @@
   const EXCERPT_OPEN = "// <" + "excerpt>", EXCERPT_CLOSE = "// </" + "excerpt>";
 
   function derive(contract, source, corpus) {
-    const hits = (contract.timing?.hits || []).map((h) => (typeof h === "number" ? { t: h, kind: "tick" } : { kind: "tick", ...h }));
+    const hits = (contract.timing?.hits || []).map((h) => ({ t: h.t, cue: h.cue, family: familyOf(h.cue) }));
     const cues = new Map(hits.filter((h) => h.cue).map((h) => [h.cue, h.t]));
     const reqs = contract.requirements;
     const count = (list, key) => list.reduce((m, x) => ((m[x[key]] = (m[x[key]] || 0) + 1), m), {});
@@ -162,7 +162,7 @@
     const peakReq = reqs.find((r) => r.metric === "true_peak_dbtp" && r.op === "le");
     const v = contract.video;
     return {
-      contract, corpus, hits, cues, reqs, reqCount: count(reqs, "kind"), hitCount: count(hits, "kind"),
+      contract, corpus, hits, cues, reqs, reqCount: count(reqs, "kind"), familyCount: count(hits, "family"),
       sourceLines: lines.length, excerpt: body.map((l, i) => ({ n: open + 2 + i, text: l.slice(indent) })),
       bpm: contract.timing?.bpm || 120, duration: v.duration, frames: Math.round(v.duration * v.fps),
       target: contract.audio?.loudness_target ?? null, ceiling: peakReq ? peakReq.target : null,
@@ -682,31 +682,137 @@
     });
   }
 
-  // The same whoosh the harness synthesizes (vch/audio.py: _whoosh, impact landing, 10 ms tail fade).
-  function whooshSamples() {
-    const rate = 48000, n = Math.floor(rate * 0.62), swell = 0.42, out = new Float64Array(n);
-    for (let i = 0; i < n; i++) {
-      const t = i / rate, rise = clamp(t / swell), after = Math.max(0, t - swell);
-      const phase = 2 * Math.PI * swell * (180 * rise + (1400 - 180) * rise ** 3 / 3);
-      const sweep = (Math.sin(phase) + 0.3 * Math.sin(2 * phase)) * (t < swell ? rise ** 3 : Math.exp(-60 * after));
-      const body = Math.sin(2 * Math.PI * (52 * after + 40 * (1 - Math.exp(-25 * after)) / 25)) * Math.exp(-9 * after);
-      const click = Math.sin(2 * Math.PI * 1800 * after) * Math.exp(-140 * after) * 0.35;
-      const fade = clamp((n - 1 - i) / (0.01 * rate));
-      out[i] = (0.3 * sweep + 0.7 * (t >= swell ? body + click : 0)) * fade;
+  // ---------- sound: this film's own families, synthesized from the cue sheet ----------
+  // The contract says when; this page decides what. Arrivals land (an airy rise, a 60 ms gap, a felt-hammer
+  // note on the new section's root), freezes and lifts stamp, completions ring glass, counted steps are beads
+  // climbing the chord of their section, and a pad moves through one chord per section. Every cue sound
+  // opens with a contact transient under 12 kHz that is its loudest sample, so its measured peak is its cue.
+  let sound = null;
+  const AUDIO_RATE = 48000, TAU = 2 * Math.PI;
+  const FAMILIES = ["land", "stamp", "glass", "bead"];
+  const STAMPS = new Set(["open.sort", "open.lift", "brief.freeze", "code.scrub", "capture.start", "capture.encode", "sound.wave",
+                          "check.pop", "check.hold", "findings.lift", "findings.loud", "findings.peak", "finale.title1", "finale.title2"]);
+  const GLASS = new Set(["open.count", "brief.binned", "code.match", "sound.meter", "check.fixed", "findings.gap", "findings.loudmed",
+                         "findings.peakred", "finale.credit"]);
+  const familyOf = (name) => (name.endsWith(".arrive") || name === "sound.align" ? "land" : STAMPS.has(name) ? "stamp" : GLASS.has(name) ? "glass" : "bead");
+  const SECTIONS = ["open", "brief", "code", "capture", "sound", "check", "findings", "finale"];
+  const CHORDS = [
+    [73.42, 110, 174.61, 261.63, 329.63],  // Dm9
+    [58.27, 87.31, 220, 261.63, 293.66],   // Bbmaj9
+    [87.31, 130.81, 164.81, 220, 329.63],  // Fmaj7
+    [65.41, 98, 164.81, 220, 293.66],      // C6/9
+    [49, 73.42, 174.61, 220, 233.08],      // Gm9
+    [55, 82.41, 146.83, 196, 246.94],      // A7sus4
+    [73.42, 110, 174.61, 261.63, 329.63],  // Dm9
+    [73.42, 110, 185, 277.18, 329.63],     // Dmaj9
+  ];
+  const chordOf = (name) => CHORDS[Math.max(0, SECTIONS.indexOf(name.split(".")[0]))];
+  // Each cue's noise comes from its own seed, so the inset can redraw exactly the sound heard at its cue.
+  const cueSeed = (name) => 101 + DATA.hits.findIndex((h) => h.cue === name);
+  const strikeAt = (i, n, amp, rate) => (i < n ? amp * Math.sin(i * rate) * (1 - i / n) : 0);
+  function band(R, rand, seconds, lo, hi) {
+    const n = sound.clip(R, seconds, () => rand() * 2 - 1), low = Float32Array.from(n);
+    sound.lowpass(n, R, hi); sound.lowpass(low, R, lo);
+    return n.map((v, i) => v - low[i]);
+  }
+  // A few ms of band noise: the contact of a hammer, mallet or bead. Pure tones carry little spectral flux.
+  const contact = (R, rand, ms, lo, hi, amp) => band(R, rand, ms / 1000, lo, hi).map((v, i, a) => amp * v * (1 - i / a.length));
+  const withContact = (hit, i) => (i < hit.length ? hit[i] : 0);
+
+  function land(R, rand, root) {
+    const rise = band(R, rand, 0.42, 400, 5000), start = rise.length + Math.round(0.06 * R), hit = contact(R, rand, 8, 200, 3000, 2.2);
+    const out = new Float32Array(start + Math.round(0.7 * R));
+    rise.forEach((v, i) => { out[i] = 0.5 * v * (i / rise.length) ** 2; });
+    for (let i = 0; start + i < out.length; i++) {
+      const t = i / R;
+      out[start + i] = strikeAt(i, 48, 1.3, 0.3) + withContact(hit, i)
+        + [1, 2, 3].reduce((v, h) => v + 0.32 / h * Math.sin(TAU * 2 * root * h * t) * Math.exp(-t * (3 + 4 * h)), 0);
     }
-    let peak = 0;
-    for (let i = 1; i < n; i++) if (Math.abs(out[i]) > Math.abs(out[peak])) peak = i;
-    const pxPerS = 500, cols = Math.ceil(n / rate * pxPerS), env = [];
+    return out;
+  }
+  function stamp(R, rand, root) {
+    const hit = contact(R, rand, 12, 150, 2500, 2.4);
+    return sound.clip(R, 0.7, (t, i) => strikeAt(i, 60, 1.4, 0.25) + withContact(hit, i)
+      + 0.7 * Math.sin(TAU * (42 * t + 68 * (1 - Math.exp(-t * 18)) / 18)) * Math.exp(-t * 6)
+      + 0.2 * Math.sin(TAU * 2 * root * t) * Math.exp(-t * 9));
+  }
+  // Two chord tones, each with the inharmonic 2.76x partial of a struck glass.
+  function glass(R, rand, chord) {
+    const hit = contact(R, rand, 3, 3000, 9000, 1.4);
+    return sound.clip(R, 2.2, (t, i) => strikeAt(i, 30, 1.2, 0.6) + withContact(hit, i)
+      + [chord[2] * 4, chord[4] * 2].reduce((v, f, k) => v + (0.22 - 0.06 * k)
+        * (Math.sin(TAU * f * t) + 0.3 * Math.sin(TAU * 2.76 * f * t) * Math.exp(-t * 6)) * Math.exp(-t * 1.8), 0));
+  }
+  function bead(R, rand, f) {
+    const hit = contact(R, rand, 3, 2000, 8000, 1.5);
+    return sound.clip(R, 0.25, (t, i) => strikeAt(i, 30, 1.1, 0.7) + withContact(hit, i)
+      + 0.35 * (Math.sin(TAU * f * t) + 0.25 * Math.sin(TAU * 2 * f * t)) * Math.exp(-t * 22));
+  }
+  // The chord's tones between 520 Hz and 2.2 kHz; a run of beads climbs them (a gap over 0.6 s starts a new run).
+  const beadScale = (chord) => [...new Set(chord.flatMap((f) => [2, 4, 8, 16].map((m) => Math.round(f * m * 100) / 100)))]
+    .filter((f) => f >= 520 && f <= 2200).sort((x, y) => x - y);
+  function beadPitches() {
+    const pitch = new Map();
+    let run = 0, last = -Infinity, section = "";
+    for (const h of DATA.hits.filter((x) => x.family === "bead")) {
+      const own = h.cue.split(".")[0];
+      run = own === section && h.t - last <= 0.6 ? run + 1 : 0;
+      const scale = beadScale(chordOf(h.cue));
+      pitch.set(h.cue, scale[Math.min(run, scale.length - 1)]);
+      last = h.t; section = own;
+    }
+    return pitch;
+  }
+  function cueClip(name, R) {
+    const rand = sound.seeded(cueSeed(name)), chord = chordOf(name), family = familyOf(name);
+    if (family === "land") return land(R, rand, chord[0]);
+    if (family === "stamp") return stamp(R, rand, chord[0]);
+    if (family === "glass") return glass(R, rand, chord);
+    return bead(R, rand, DATA.beadPitch.get(name));
+  }
+  const CUE_GAIN = { land: 0.5, stamp: 0.45, glass: 0.45, bead: 0.36 };
+  const CUE_PAN = { land: 0, stamp: -0.1, glass: 0.3, bead: -0.3 };
+
+  // One chord per section, crossfading over 1.2 s around each arrival, under a gentle low-pass. The root is
+  // the quietest voice: low notes cost peak level without adding much loudness after K-weighting.
+  const PAD_WEIGHT = [0.22, 0.36, 0.42, 0.38, 0.32];
+  function padBed(R, length, duration) {
+    const starts = SECTIONS.map((name, k) => (k === 0 ? 0 : cue(`${name}.arrive`))), out = new Float32Array(length);
+    for (let i = 0; i < length; i++) {
+      const t = i / R;
+      let v = 0;
+      for (let k = 0; k < CHORDS.length; k++) {
+        const w = (k === 0 ? 1 : clamp((t - starts[k] + 0.6) / 1.2)) * (k + 1 < starts.length ? 1 - clamp((t - starts[k + 1] + 0.6) / 1.2) : 1);
+        if (w > 0) v += w * CHORDS[k].reduce((sum, f, j) => sum + PAD_WEIGHT[j] * (Math.sin(TAU * f * t + j) + Math.sin(TAU * f * 1.003 * t)), 0);
+      }
+      out[i] = v * clamp(t / 1.5) * clamp((duration - t) / 2);
+    }
+    return sound.lowpass(out, R, 1800);
+  }
+
+  function synthesize({ sampleRate: R, duration }) {
+    const out = sound.stereo(R, duration), bed = padBed(R, out.length, duration);
+    sound.duck(bed, R, DATA.hits.map((h) => h.t), { depth: 0.7, release: 0.3 });
+    sound.addBed(out, bed, { gain: 0.36, width: 71 });
+    for (const h of DATA.hits) sound.place(out, cueClip(h.cue, R), h.t, { gain: CUE_GAIN[h.family], pan: CUE_PAN[h.family] });
+    return [out.left, out.right];
+  }
+
+  // The inset draws the landing heard at sound.align: same seed, same rate, normalised for display.
+  function landInset() {
+    const samples = cueClip("sound.align", AUDIO_RATE), peak = sound.peakIndex(samples), scale = 0.9 / Math.abs(samples[peak]);
+    const pxPerS = 500, cols = Math.ceil(samples.length / AUDIO_RATE * pxPerS), env = [];
     for (let c = 0; c < cols; c++) {
       let lo = 0, hi = 0;
-      for (let i = Math.floor(c * rate / pxPerS); i < Math.min(n, Math.floor((c + 1) * rate / pxPerS)); i++) { lo = Math.min(lo, out[i]); hi = Math.max(hi, out[i]); }
+      for (let i = Math.floor(c * AUDIO_RATE / pxPerS); i < Math.min(samples.length, Math.floor((c + 1) * AUDIO_RATE / pxPerS)); i++) {
+        lo = Math.min(lo, samples[i] * scale); hi = Math.max(hi, samples[i] * scale);
+      }
       env.push([lo, hi]);
     }
-    return { env, peakS: peak / rate, pxPerS };
+    return { env, peakS: peak / AUDIO_RATE, pxPerS };
   }
-  let WHOOSH = null;
-  const CUE_LANES = ["whoosh", "impact", "chime", "tick"];
-  const CUE_X = (s) => 200 + 684 * clamp(s / DATA.duration);
+  let LAND = null;
+    const CUE_X = (s) => 200 + 684 * clamp(s / DATA.duration);
   const WAVE_BEAT_X = 260;
 
   function soundPanel(g, t) {
@@ -718,18 +824,18 @@
       if (a <= 0) continue;
       g.fillStyle = rgba(S.color.grid, a); g.fillRect(CUE_X(s) - (bar ? 1 : 0.5), 18, bar ? 2 : 1, 200);
     }
-    CUE_LANES.forEach((kind, li) => { g.fillStyle = rgba(S.color.grid, 0.08); g.fillRect(200, 26 + 50 * li, 684, 34); });
+    FAMILIES.forEach((family, li) => { g.fillStyle = rgba(S.color.grid, 0.08); g.fillRect(200, 26 + 50 * li, 684, 34); });
     for (const hit of DATA.hits) {
       const at = cuesOn + 0.6 * (hit.t / DATA.duration), on = spring(t - at, 0.3, 0.6);
       if (on <= 0) continue;
-      const li = CUE_LANES.indexOf(hit.kind), x = CUE_X(hit.t), y = 43 + 50 * li, color = CUE_COLOR[hit.kind];
+      const li = FAMILIES.indexOf(hit.family), x = CUE_X(hit.t), y = 43 + 50 * li, color = CUE_COLOR[hit.family];
       const flash = t >= hit.t && t < hit.t + 0.3 ? 1 - (t - hit.t) / 0.3 : 0;
       if (flash > 0) glow(g, x, y, 34, color, 0.8 * flash);
       g.fillStyle = color;
       g.save(); g.translate(x, y); g.scale(on, on);
-      if (hit.kind === "whoosh") { g.beginPath(); g.moveTo(-14, 12); g.lineTo(0, -14); g.lineTo(0, 12); g.closePath(); g.fill(); }
-      else if (hit.kind === "impact") g.fillRect(-2.5, -15, 5, 30);
-      else if (hit.kind === "chime") { g.beginPath(); g.arc(0, 0, 7, 0, 7); g.fill(); }
+      if (hit.family === "land") { g.beginPath(); g.moveTo(-14, 12); g.lineTo(0, -14); g.lineTo(0, 12); g.closePath(); g.fill(); }
+      else if (hit.family === "stamp") g.fillRect(-2.5, -15, 5, 30);
+      else if (hit.family === "glass") { g.beginPath(); g.arc(0, 0, 7, 0, 7); g.fill(); }
       else g.fillRect(-1, -9, 2, 18);
       g.restore();
     }
@@ -739,13 +845,13 @@
     well(g, 0, 290, 600, 310);
     const waveOn = smooth((t - cue("sound.wave")) / 0.35), align = cue("sound.align");
     if (waveOn > 0) {
-      const shift = -WHOOSH.peakS * WHOOSH.pxPerS * ease((t - (align - 0.4)) / 0.4);
+      const shift = -LAND.peakS * LAND.pxPerS * ease((t - (align - 0.4)) / 0.4);
       const x0 = WAVE_BEAT_X + shift, mid = 470, amp = 120 * waveOn;
       g.save(); roundRect(g, 0, 290, 600, 310, 12); g.clip();
       g.fillStyle = rgba(C.third, 0.9);
-      WHOOSH.env.forEach(([lo, hi], c) => { const x = x0 + c; if (x > 4 && x < 596) g.fillRect(x, mid - hi * amp, 1, Math.max(1, (hi - lo) * amp)); });
+      LAND.env.forEach(([lo, hi], c) => { const x = x0 + c; if (x > 4 && x < 596) g.fillRect(x, mid - hi * amp, 1, Math.max(1, (hi - lo) * amp)); });
       g.fillStyle = C.dim; g.fillRect(x0 - 1, 380, 2, 180);
-      g.fillStyle = C.alert; g.fillRect(x0 + WHOOSH.peakS * WHOOSH.pxPerS - 1.5, 380, 3, 180);
+      g.fillStyle = C.alert; g.fillRect(x0 + LAND.peakS * LAND.pxPerS - 1.5, 380, 3, 180);
       g.restore();
       const hitFlash = t >= align && t < align + 0.4 ? 1 - (t - align) / 0.4 : 0;
       glow(g, WAVE_BEAT_X, mid, 70, C.fourth, 0.7 * hitFlash);
@@ -1131,7 +1237,9 @@
     parent.appendChild(e);
     return e;
   }
+  // Fading text gets its own compositor layer, so how Chromium layers it never depends on the previous frame.
   function show(e, opacity) {
+    e.style.willChange = "opacity";
     e.style.opacity = opacity.toFixed(3);
     e.style.visibility = opacity > 0.002 ? "visible" : "hidden";
   }
@@ -1170,7 +1278,7 @@
         desc: `Headless Chromium seeks to t and takes a screenshot, ${fmt(DATA.frames)} times. Averaging sub-frames makes motion blur. FFmpeg encodes the result.`,
         from: A.arrive[2] + 0.15, to: A.depart[2] },
       { kicker: "04 · SOUND", headline: "Every sound lands by its peak.", wrap: 540,
-        desc: `This film’s ${DATA.hits.length} cues sit on a ${DATA.bpm} BPM grid. Each is shifted so its loudest sample, not its first, hits the beat.`,
+        desc: `This page synthesizes its ${DATA.hits.length} cue sounds on a ${DATA.bpm} BPM grid. Each is shifted so its loudest sample, not its first, hits the beat.`,
         from: A.arrive[3] + 0.15, to: A.depart[3] },
       { kicker: "05 · CHECK", headline: "Then it measures what it rendered.", wrap: 560,
         desc: "The harness decodes its own MP4. Frames, timestamps and loudness are measured from the file, not the preview.",
@@ -1326,22 +1434,22 @@
 
   function soundLabels() {
     const specs = [];
-    CUE_LANES.forEach((kind, li) => specs.push({ id: `snd.${kind}`, text: `${kind} ${DATA.hitCount[kind] || 0}`, x: 16, y: 29 + 50 * li,
-                                                 color: CUE_COLOR[kind], show: (t) => smooth((t - cue("sound.cues")) / 0.3) }));
+    FAMILIES.forEach((family, li) => specs.push({ id: `snd.${family}`, text: `${family} ${DATA.familyCount[family] || 0}`, x: 16, y: 29 + 50 * li,
+                                                 color: CUE_COLOR[family], show: (t) => smooth((t - cue("sound.cues")) / 0.3) }));
     specs.push({ id: "snd.bpm", text: `${DATA.bpm} BPM`, x: 16, y: 226, color: C.dim, show: (t) => smooth((t - cue("sound.bars")) / 0.3) });
     specs.push({ id: "snd.t0", text: "0 s", x: 200, y: 226, color: C.dim });
     specs.push({ id: "snd.t1", text: `${DATA.duration} s`, x: 884, y: 226, align: "r", color: C.dim });
-    specs.push({ id: "snd.file", text: "whoosh.wav", x: 20, y: 304, color: C.dim, show: (t) => smooth((t - cue("sound.wave")) / 0.3) });
-    const ms = Math.round(WHOOSH.peakS * 1000);
+    specs.push({ id: "snd.file", text: "land()", x: 20, y: 304, color: C.dim, show: (t) => smooth((t - cue("sound.wave")) / 0.3) });
+    const ms = Math.round(LAND.peakS * 1000);
     specs.push({ id: "snd.how", cls: "label sans", text: "", x: 180, y: 304, color: C.ink,
                  text$: (t) => (t < cue("sound.align") - 0.2 ? `by its start: peak lands ${ms} ms late` : "by its peak: it lands on the beat"),
                  show: (t) => smooth((t - cue("sound.wave")) / 0.3) });
     specs.push({ id: "snd.beat", text: "beat", x: WAVE_BEAT_X, y: 344, align: "c", color: C.fourth, show: (t) => smooth((t - cue("sound.wave")) / 0.3) });
-    const shiftX = (t) => -WHOOSH.peakS * WHOOSH.pxPerS * ease((t - (cue("sound.align") - 0.4)) / 0.4);
+    const shiftX = (t) => -LAND.peakS * LAND.pxPerS * ease((t - (cue("sound.align") - 0.4)) / 0.4);
     specs.push({ id: "snd.start", text: "start", x: 0, y: 564, align: "c", color: C.soft, show: (t) => smooth((t - cue("sound.wave")) / 0.3) * (1 - smooth((t - cue("sound.align") + 0.5) / 0.2)),
                  at$: (t) => [WAVE_BEAT_X + shiftX(t), 564] });
     specs.push({ id: "snd.peak", text: `peak +${ms} ms`, x: 0, y: 564, align: "c", color: C.alert, show: (t) => smooth((t - cue("sound.wave")) / 0.3),
-                 at$: (t) => [WAVE_BEAT_X + shiftX(t) + WHOOSH.peakS * WHOOSH.pxPerS, 564] });
+                 at$: (t) => [WAVE_BEAT_X + shiftX(t) + LAND.peakS * LAND.pxPerS, 564] });
     specs.push({ id: "snd.meter", text: "loudness", x: 644, y: 304, color: C.dim, show: (t) => smooth((t - cue("sound.meter") + 0.3) / 0.3) });
     if (DATA.target !== null) specs.push({ id: "snd.target", text: `target ${minus(DATA.target)} LUFS`, x: 884, y: 364, align: "r", color: C.ink,
                                            show: (t) => smooth((t - cue("sound.target")) / 0.3) });
@@ -1453,7 +1561,7 @@
       place(label, 96, 506, "l", smooth((t - cue("finale.stat1") + 0.15) / 0.3));
       parts.forEach(({ row, spans, r }) => {
         place(row, 96, 548 + 40 * r, "l", smooth((t - spans[0].at) / 0.2));
-        spans.forEach(({ span, at }) => { span.style.opacity = smooth((t - at) / 0.2).toFixed(3); });
+        spans.forEach(({ span, at }) => { span.style.willChange = "opacity"; span.style.opacity = smooth((t - at) / 0.2).toFixed(3); });
       });
       credits.forEach((c, j) => place(c, 96, 700 + 38 * j, "l", smooth((t - cue("finale.credit") - 0.15 * j) / 0.4)));
     });
@@ -1501,7 +1609,8 @@
     TILES = buildTiles();
     CHIPS = chipPlan();
     SWARM = buildSwarm();
-    WHOOSH = whooshSamples();
+    DATA.beadPitch = beadPitches();
+    LAND = landInset();
     textBlocks();
     briefLabels(); codeLabels(); captureLabels(); soundLabels(); checkLabels(); findingsLabels(); openLabels(); finaleLabels(); sheetLabels(); hud();
     for (const e of dom.querySelectorAll(".code")) highlight(e);
@@ -1530,15 +1639,18 @@
 
   async function load() {
     const contractUrl = harness ? "/contract.json" : "/examples/how-code-becomes-video.json";
-    const [contract, source, corpus] = await Promise.all([
+    const [contract, source, corpus, mechanics] = await Promise.all([
       fetch(contractUrl).then((r) => r.json()), fetch(location.pathname).then((r) => r.text()), fetch("corpus.json").then((r) => r.json()),
+      import("/compositions/_lib/sound.js"),
     ]);
+    sound = mechanics;
     DATA = derive(contract, source, corpus);
     applyStyle(contract.style);
     build();
   }
 
   vch.seek = seek;
+  vch.audio = synthesize;
   vch.ready = load();
   if (!harness) {
     const fit = () => { $("stage").style.transform = `scale(${Math.min(innerWidth / W, innerHeight / H)})`; };

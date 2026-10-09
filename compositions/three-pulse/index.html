@@ -38,13 +38,22 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 import { clamp, lerp, ease, easeOut, smooth, seeded, loadContract, el, show, place, maskedWords, riseWords, preview } from "/compositions/_lib/clip.js";
+import * as sound from "/compositions/_lib/sound.js";
 
 const W = 1280, H = 720, NX = 36, NZ = 20, PITCH = 0.62;
 const vch = (window.__vch = window.__vch || {});
 let renderer, composer, scene, camera, blocks, cells, ripples, C, T, TEXT, HITS;
 const dom = document.getElementById("dom");
 const LOW = new THREE.Color("#2A0B5E"), MID = new THREE.Color("#FF2FB4"), HIGH = new THREE.Color("#5FF6FF");
-const STRENGTH = { impact: 1.0, chime: 0.85, whoosh: 0.75, tick: 0.38 };
+// One drum-machine voice per cue; the ripple's strength follows the voice, so picture and sound agree.
+const STRENGTH = { kick: 1.0, clap: 0.85, drop: 0.75, hat: 0.38, zap: 0.38, blip: 0.38 };
+function voice(h) {
+  if (h.cue === "title.in") return "zap";
+  if (h.cue === "caption.in") return "blip";
+  if (h.cue === "beat.8") return "clap";
+  if (h.cue === "beat.12") return "drop";
+  return Number(h.cue.split(".")[1]) % 2 === 0 ? "kick" : "hat";
+}
 
 function build() {
   renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("gl"), antialias: true, preserveDrawingBuffer: true });
@@ -75,7 +84,7 @@ function build() {
 
   // One ripple per cue, from a seeded origin on the field.
   const rand = seeded(23);
-  ripples = HITS.map((h) => ({ t: h.t, a: STRENGTH[h.kind] || 0.6, x: lerp(-8, 8, rand()), z: lerp(-4, 4, rand()) }));
+  ripples = HITS.map((h) => ({ t: h.t, a: STRENGTH[voice(h)], x: lerp(-8, 8, rand()), z: lerp(-4, 4, rand()) }));
 
   const target = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4 });
   composer = new EffectComposer(renderer, target);
@@ -128,9 +137,69 @@ function seek(t) {
   place(TEXT.counter, 64, H - 36 - 40, "l", smooth((t - C("title.in")) / 0.3));
 }
 
+// ---------- sound: drum machine, synthesized here ----------
+// Kicks on the whole seconds and hats on the half beats; a clap with a minor stab at beat 8, a noise riser
+// that cuts out 0.1 s before a dropped kick at beat 12, a falling zap for the title and a rising chirp for the caption; a sub
+// bassline pumps under every cue. Each voice opens with a strike under 12 kHz that is its loudest sample.
+let SOUND_HITS = [];
+const TAU = Math.PI * 2;
+const strike = (i, n, amp, rate = 0.5) => (i < n ? amp * Math.sin(i * rate) * (1 - i / n) : 0);
+const sweep = (t, from, to, k) => TAU * (to * t + (from - to) * (1 - Math.exp(-t * k)) / k);
+const kick = (R, size = 1) => sound.clip(R, 0.5 * size, (t, i) => strike(i, 40, 1.3)
+  + Math.sin(sweep(t, 150, 45, 30)) * Math.exp(-t * 7 / size));
+function noiseBurst(R, rand, seconds, lo, hi) {
+  const n = sound.clip(R, seconds, () => rand() * 2 - 1), low = Float32Array.from(n);
+  sound.lowpass(n, R, hi); sound.lowpass(low, R, lo);
+  return n.map((v, i) => v - low[i]);
+}
+function hat(R, rand) {
+  const band = noiseBurst(R, rand, 0.09, 5000, 11000);
+  return band.map((v, i) => strike(i, 32, 1.2, 1.0) + v * Math.exp(-(i / R) * 70));
+}
+function clap(R, rand) {
+  const band = noiseBurst(R, rand, 0.35, 700, 2600);
+  return band.map((v, i) => {
+    const t = i / R, bursts = [0, 0.011, 0.023].reduce((e, s, k) => e + (t >= s ? Math.exp(-(t - s) * 180) * (k ? 0.7 : 1) : 0), 0);
+    return strike(i, 40, 1.2, 0.3) + 1.8 * v * (bursts + 0.35 * Math.exp(-t * 9));
+  });
+}
+const stab = (R) => sound.clip(R, 0.6, (t) => [220, 261.6, 329.6].reduce((v, f) =>
+  v + [1, 2, 3, 4].reduce((s, h) => s + Math.sin(TAU * f * h * t + h) / h, 0), 0) * 0.12 * Math.min(1, t / 0.004) * Math.exp(-t * 6));
+function riser(R, rand) {
+  const n = sound.clip(R, 0.9, () => rand() * 2 - 1);
+  sound.lowpass(n, R, (t) => 300 + 7000 * t * t);
+  return n.map((v, i) => 1.7 * v * (i / R / 0.9) ** 2);
+}
+const zap = (R) => sound.clip(R, 0.16, (t, i) => strike(i, 40, 1.2, 0.7) + 0.4 * Math.sin(sweep(t, 2400, 180, 25)) * Math.exp(-t * 14));
+const chirp = (R) => sound.clip(R, 0.09, (t, i) => strike(i, 40, 1.1, 0.8) + 0.35 * Math.sin(TAU * (1200 * t + 3300 * t * t)) * Math.exp(-t * 30));
+const BASS = [55, 55, 82.4, 55, 65.4, 55, 49, 61.7];
+
+function synthesize({ sampleRate: R, duration }) {
+  const out = sound.stereo(R, duration), rand = sound.seeded(29), bass = new Float32Array(out.length);
+  for (let i = 0; i < out.length; i++) {
+    const t = i / R, step = Math.floor(t / 0.5), age = t - step * 0.5, f = BASS[step % BASS.length];
+    const env = Math.min(1, age / 0.012) * Math.exp(-age * 3) * Math.min(1, t / 0.5);
+    bass[i] = env * [1, 2, 3, 4, 5].reduce((v, h) => v + Math.sin(TAU * f * h * t) / (h * h), 0);
+  }
+  sound.lowpass(bass, R, 380);
+  sound.duck(bass, R, SOUND_HITS.map((h) => h.t), { depth: 0.75, release: 0.35 });
+  sound.addBed(out, bass, { gain: 0.55 });
+  for (const h of SOUND_HITS) {
+    const v = voice(h);
+    if (v === "kick") sound.place(out, kick(R), h.t, { gain: 0.8 });
+    if (v === "hat") sound.place(out, hat(R, rand), h.t, { gain: 0.42, pan: 0.35 });
+    if (v === "clap") { sound.place(out, clap(R, rand), h.t, { gain: 0.6, pan: -0.15 }); sound.place(out, stab(R), h.t + 0.004, { gain: 0.5, align: "start" }); }
+    if (v === "drop") { sound.place(out, riser(R, rand), h.t - 1.0, { gain: 0.32, align: "start" }); sound.place(out, kick(R, 2), h.t, { gain: 0.95 }); }
+    if (v === "zap") sound.place(out, zap(R), h.t, { gain: 0.5, pan: -0.4 });
+    if (v === "blip") sound.place(out, chirp(R), h.t, { gain: 0.45, pan: 0.4 });
+  }
+  return [out.left, out.right];
+}
+
 vch.seek = seek;
+vch.audio = synthesize;
 vch.ready = loadContract("/examples/three-pulse.json").then((loaded) => {
-  C = loaded.cue; HITS = loaded.hits; T = { duration: loaded.contract.video.duration };
+  C = loaded.cue; SOUND_HITS = loaded.hits; HITS = loaded.hits; SOUND_HITS = HITS; T = { duration: loaded.contract.video.duration };
   build(); buildText();
   if (!loaded.harness) preview(document.getElementById("stage"), W, H, T.duration, seek);
 });

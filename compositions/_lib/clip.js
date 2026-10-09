@@ -41,7 +41,7 @@ export function seeded(seed) {
 export async function loadContract(previewPath) {
   const harness = Boolean(window.__vch && window.__vch.harness);
   const contract = await fetch(harness ? "/contract.json" : previewPath).then((r) => r.json());
-  const hits = (contract.timing?.hits || []).map((h) => (typeof h === "number" ? { t: h, kind: "tick" } : { kind: "tick", ...h }));
+  const hits = (contract.timing?.hits || []).map((h) => (typeof h === "number" ? { t: h } : { ...h }));
   const cues = new Map(hits.filter((h) => h.cue).map((h) => [h.cue, h.t]));
   const cue = (name) => {
     if (!cues.has(name)) throw new Error(`Missing cue in contract timing.hits: ${name}`);
@@ -59,7 +59,11 @@ export function el(parent, cls, text, id) {
   return e;
 }
 
+// Fading elements get their own compositor layer: otherwise Chromium may merge an element that was just
+// shown into its neighbours' layer or keep it separate depending on the previous frame, and the same t
+// renders with 1-level differences depending on seek order.
 export function show(e, opacity) {
+  e.style.willChange = "opacity";
   e.style.opacity = opacity.toFixed(3);
   e.style.visibility = opacity > 0.002 ? "visible" : "hidden";
 }
