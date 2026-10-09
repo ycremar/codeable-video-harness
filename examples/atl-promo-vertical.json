@@ -1,0 +1,632 @@
+{
+ "version": 1,
+ "title": "A TENNIS LAB - PROMO (VERTICAL)",
+ "seed": 23,
+ "backend": "html",
+ "html": {
+  "entry": "compositions/atl-promo/index.html"
+ },
+ "video": {
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "duration": 32
+ },
+ "render": {
+  "samples": 1
+ },
+ "assets": [
+  {
+   "path": "assets/fonts/Inter.ttf",
+   "source": "https://github.com/google/fonts/tree/main/ofl/inter",
+   "license": "SIL OFL 1.1; assets/fonts/Inter-OFL.txt"
+  },
+  {
+   "path": "assets/fonts/JetBrainsMono.ttf",
+   "source": "https://github.com/google/fonts/tree/main/ofl/jetbrainsmono",
+   "license": "SIL OFL 1.1; assets/fonts/JetBrainsMono-OFL.txt"
+  },
+  {
+   "path": "assets/fonts/NotoSerifSC.ttf",
+   "source": "https://github.com/google/fonts/tree/main/ofl/notoserifsc",
+   "license": "SIL OFL 1.1; assets/fonts/NotoSerifSC-OFL.txt"
+  },
+  {
+   "path": "compositions/_vendor/three/",
+   "source": "npm three@0.186.0 (build/ and a subset of examples/jsm), unmodified",
+   "license": "MIT; compositions/_vendor/three/LICENSE"
+  },
+  {
+   "path": "compositions/_lib/",
+   "source": "this repository",
+   "license": "MIT; LICENSE"
+  }
+ ],
+ "brief": "32-second pre-opening promo for A Tennis Lab (ATL), an indoor tennis training studio in Seattle. Facts allowed: 4 half-court training lanes plus a practice wall called The Wall; programmable ball machines; human coaching; rigorous, focused practice that turns into progress you can take into matches; every session picks up where the last one left off (下次接着练); atennislab.com; call to action: join the waitlist. Forbidden: any AI / machine learning / smart / algorithm language, pricing, address, hours, opening date, invented stats or testimonials. Direction: serious, premium training brand. One continuous three.js world in a dark studio: a lit half-court lane with a ball machine feeding balls into floor targets, a crane reveal of all four lanes and The Wall, reps accumulating as landing marks, last session's marks kept while this session continues, then the lane opens into a full match court and the last practice ball is played across the net. Closing card: wordmark, atennislab.com, Join the waitlist. Vertical 9:16 cut of the same composition: text column on top, 3D below, text clear of typical social-app UI at the bottom.",
+ "audio": {
+  "mode": "procedural",
+  "gain": 0.8,
+  "bed": false,
+  "pad": 1.4,
+  "loudness_target": -16,
+  "peak_ceiling_dbfs": -2
+ },
+ "timing": {
+  "bpm": 120,
+  "beat_offset": 0,
+  "hits": [
+   {
+    "t": 0.4,
+    "kind": "tick",
+    "cue": "title.lane"
+   },
+   {
+    "t": 1.5,
+    "kind": "tick",
+    "cue": "b0.launch"
+   },
+   {
+    "t": 2.3,
+    "kind": "impact",
+    "cue": "b0.land"
+   },
+   {
+    "t": 3.4,
+    "kind": "tick",
+    "cue": "b1.launch"
+   },
+   {
+    "t": 4.2,
+    "kind": "impact",
+    "cue": "b1.land"
+   },
+   {
+    "t": 6.3,
+    "kind": "tick",
+    "cue": "title.studio"
+   },
+   {
+    "t": 7.7,
+    "kind": "impact",
+    "cue": "l0.land"
+   },
+   {
+    "t": 8.2,
+    "kind": "impact",
+    "cue": "l1.land"
+   },
+   {
+    "t": 8.7,
+    "kind": "impact",
+    "cue": "l2.land"
+   },
+   {
+    "t": 9.2,
+    "kind": "impact",
+    "cue": "l3.land"
+   },
+   {
+    "t": 10.2,
+    "kind": "impact",
+    "cue": "wall.hit"
+   },
+   {
+    "t": 10.9,
+    "kind": "tick",
+    "cue": "wall.bounce"
+   },
+   {
+    "t": 12.4,
+    "kind": "tick",
+    "cue": "title.reps"
+   },
+   {
+    "t": 13.1,
+    "kind": "impact",
+    "cue": "r0.land"
+   },
+   {
+    "t": 13.85,
+    "kind": "impact",
+    "cue": "r1.land"
+   },
+   {
+    "t": 14.6,
+    "kind": "impact",
+    "cue": "r2.land"
+   },
+   {
+    "t": 15.35,
+    "kind": "impact",
+    "cue": "r3.land"
+   },
+   {
+    "t": 16.1,
+    "kind": "impact",
+    "cue": "r4.land"
+   },
+   {
+    "t": 17.5,
+    "kind": "chime",
+    "cue": "session.close"
+   },
+   {
+    "t": 18.0,
+    "kind": "tick",
+    "cue": "title.session"
+   },
+   {
+    "t": 18.7,
+    "kind": "impact",
+    "cue": "s0.land"
+   },
+   {
+    "t": 19.45,
+    "kind": "impact",
+    "cue": "s1.land"
+   },
+   {
+    "t": 20.2,
+    "kind": "impact",
+    "cue": "s2.land"
+   },
+   {
+    "t": 20.95,
+    "kind": "impact",
+    "cue": "s3.land"
+   },
+   {
+    "t": 22.0,
+    "kind": "whoosh",
+    "cue": "match.open"
+   },
+   {
+    "t": 22.4,
+    "kind": "tick",
+    "cue": "title.match"
+   },
+   {
+    "t": 23.3,
+    "kind": "impact",
+    "cue": "m.land"
+   },
+   {
+    "t": 23.7,
+    "kind": "tick",
+    "cue": "m.hit"
+   },
+   {
+    "t": 24.7,
+    "kind": "impact",
+    "cue": "m.far"
+   },
+   {
+    "t": 27.4,
+    "kind": "whoosh",
+    "cue": "close.in"
+   },
+   {
+    "t": 28.1,
+    "kind": "tick",
+    "cue": "wordmark.in"
+   },
+   {
+    "t": 29.2,
+    "kind": "chime",
+    "cue": "cta.on"
+   }
+  ]
+ },
+ "qa": {
+  "sample_every": 1
+ },
+ "scenes": [
+  {
+   "id": "lane",
+   "start": 0,
+   "end": 6,
+   "params": {
+    "kind": "lane",
+    "beat": "low shot along one lit half-court lane; machine feeds two balls into floor targets",
+    "copy": [
+     "A TENNIS LAB · SEATTLE",
+     "Practice with intent.",
+     "An indoor tennis training studio."
+    ]
+   }
+  },
+  {
+   "id": "studio",
+   "start": 6,
+   "end": 12,
+   "params": {
+    "kind": "reveal",
+    "beat": "crane up; lanes light one by one, a ball lands in each; The Wall takes a ball",
+    "copy": [
+     "THE STUDIO",
+     "Four lanes. One wall.",
+     "Half-court training lanes, plus The Wall.",
+     "Programmable ball machines",
+     "Human coaching"
+    ]
+   }
+  },
+  {
+   "id": "reps",
+   "start": 12,
+   "end": 17,
+   "params": {
+    "kind": "reps",
+    "beat": "three-quarter view of the target zone; five reps leave landing marks",
+    "copy": [
+     "THE WORK",
+     "Rigorous reps. Real focus.",
+     "Every ball has a target."
+    ]
+   }
+  },
+  {
+   "id": "session",
+   "start": 17,
+   "end": 22,
+   "params": {
+    "kind": "continuity",
+    "beat": "overhead; session 01 marks dim but stay, session 02 lands tighter",
+    "copy": [
+     "SESSION TO SESSION",
+     "Pick up where you left off.",
+     "下次接着练"
+    ]
+   }
+  },
+  {
+   "id": "match",
+   "start": 22,
+   "end": 27,
+   "params": {
+    "kind": "transfer",
+    "beat": "lane opens into a full match court; last practice ball is played across the net",
+    "copy": [
+     "ON COURT",
+     "Take it to the match.",
+     "Progress you can take into your matches."
+    ]
+   }
+  },
+  {
+   "id": "close",
+   "start": 27,
+   "end": 32,
+   "params": {
+    "kind": "card",
+    "beat": "closing card over the darkened court",
+    "copy": [
+     "A Tennis Lab",
+     "Indoor tennis training · Seattle",
+     "Opening soon",
+     "Join the waitlist",
+     "atennislab.com"
+    ]
+   }
+  }
+ ],
+ "requirements": [
+  {
+   "id": "DUR",
+   "description": "Exactly 32 seconds",
+   "kind": "hard",
+   "metric": "duration_s",
+   "op": "eq",
+   "target": 32.0
+  },
+  {
+   "id": "WIDTH",
+   "description": "1080 pixels wide",
+   "kind": "hard",
+   "metric": "width_px",
+   "op": "eq",
+   "target": 1080
+  },
+  {
+   "id": "HEIGHT",
+   "description": "1920 pixels high",
+   "kind": "hard",
+   "metric": "height_px",
+   "op": "eq",
+   "target": 1920
+  },
+  {
+   "id": "FPS",
+   "description": "30 fps",
+   "kind": "hard",
+   "metric": "fps",
+   "op": "eq",
+   "target": 30
+  },
+  {
+   "id": "FRAMES",
+   "description": "Exactly 960 encoded frames",
+   "kind": "hard",
+   "metric": "encoded_frame_count",
+   "op": "eq",
+   "target": 960
+  },
+  {
+   "id": "PTS",
+   "description": "Evenly spaced frame timestamps",
+   "kind": "hard",
+   "metric": "frame_timestamp_jitter_ms",
+   "op": "le",
+   "target": 1
+  },
+  {
+   "id": "AUDIO",
+   "description": "Original synthesized audio exists",
+   "kind": "hard",
+   "metric": "audio_present",
+   "op": "eq",
+   "target": true
+  },
+  {
+   "id": "LOUD-MIN",
+   "description": "Integrated loudness after AAC encode at least -18 LUFS",
+   "kind": "hard",
+   "metric": "integrated_loudness_lufs",
+   "op": "ge",
+   "target": -18
+  },
+  {
+   "id": "LOUD-MAX",
+   "description": "Integrated loudness after AAC encode at most -15 LUFS",
+   "kind": "hard",
+   "metric": "integrated_loudness_lufs",
+   "op": "le",
+   "target": -15
+  },
+  {
+   "id": "TRUE-PEAK",
+   "description": "True peak after AAC encode at most -1 dBTP",
+   "kind": "hard",
+   "metric": "true_peak_dbtp",
+   "op": "le",
+   "target": -1
+  },
+  {
+   "id": "SEEK",
+   "description": "WebGL frames and telemetry unaffected by seek order",
+   "kind": "hard",
+   "metric": "determinism_mismatches",
+   "op": "eq",
+   "target": 0
+  },
+  {
+   "id": "HITS",
+   "description": "A detectable sound lands within 20 ms of every declared cue",
+   "kind": "proxy",
+   "metric": "audio_hit_sync_ms",
+   "op": "le",
+   "target": 20
+  },
+  {
+   "id": "BEAT",
+   "description": "Scene cuts sit on the 120 BPM grid",
+   "kind": "proxy",
+   "metric": "beat_cut_error_ms",
+   "op": "le",
+   "target": 1
+  },
+  {
+   "id": "COPY-FACTS",
+   "description": "Approved facts appear in visible-text telemetry",
+   "kind": "proxy",
+   "metric": "text_present",
+   "params": {
+    "strings": [
+     "A Tennis Lab",
+     "Seattle",
+     "Four lanes. One wall.",
+     "Half-court training lanes, plus The Wall.",
+     "Programmable ball machines",
+     "Human coaching",
+     "Pick up where you left off.",
+     "Progress you can take into your matches."
+    ]
+   },
+   "op": "eq",
+   "target": true
+  },
+  {
+   "id": "CTA",
+   "description": "Closing card shows the website and the waitlist call to action",
+   "kind": "proxy",
+   "metric": "text_present",
+   "params": {
+    "strings": [
+     "atennislab.com",
+     "Join the waitlist",
+     "Opening soon"
+    ]
+   },
+   "op": "eq",
+   "target": true
+  },
+  {
+   "id": "ZH",
+   "description": "The one Chinese line appears",
+   "kind": "proxy",
+   "metric": "text_present",
+   "params": {
+    "strings": [
+     "下次接着练"
+    ]
+   },
+   "op": "eq",
+   "target": true
+  },
+  {
+   "id": "NO-TECH",
+   "description": "No AI / machine-learning / smart / algorithm language in the text trace (case-sensitive substrings; bare 'AI' is left to the TRUTH review because it occurs inside WAITLIST/TRAINING)",
+   "kind": "proxy",
+   "metric": "text_absent",
+   "params": {
+    "strings": [
+     " AI",
+     "AI ",
+     "AI-",
+     "A.I.",
+     "AI.",
+     "smart",
+     "Smart",
+     "SMART",
+     "algorithm",
+     "Algorithm",
+     "ALGORITHM",
+     "machine learning",
+     "Machine learning",
+     "MACHINE LEARNING",
+     "intelligen",
+     "Intelligen",
+     "INTELLIGEN",
+     "data-driven",
+     "Data-driven",
+     "personali",
+     "Personali",
+     "adaptive",
+     "Adaptive"
+    ]
+   },
+   "op": "eq",
+   "target": true
+  },
+  {
+   "id": "NO-CLAIMS",
+   "description": "No pricing, address, hours, opening date, stats or testimonial markers in the text trace",
+   "kind": "proxy",
+   "metric": "text_absent",
+   "params": {
+    "strings": [
+     "$",
+     "%",
+     "USD",
+     "per hour",
+     "/hr",
+     "Ave",
+     "Street",
+     " St.",
+     "WA 98",
+     "a.m.",
+     "p.m.",
+     " AM",
+     " PM",
+     "Open now",
+     "Opening on",
+     "2026",
+     "2027",
+     "Book now",
+     "★",
+     "“",
+     "”",
+     "best in",
+     "Best in",
+     "#1"
+    ]
+   },
+   "op": "eq",
+   "target": true
+  },
+  {
+   "id": "FONT",
+   "description": "All visible text at least 24 px at 1080x1920",
+   "kind": "proxy",
+   "metric": "minimum_text_size_px",
+   "op": "ge",
+   "target": 24
+  },
+  {
+   "id": "CONTRAST",
+   "description": "Settled text colour vs rendered backing at least 4.5:1",
+   "kind": "proxy",
+   "metric": "minimum_contrast",
+   "op": "ge",
+   "target": 4.5
+  },
+  {
+   "id": "SAFE",
+   "description": "Text inside a social-safe region (72 px sides, 150 px top, 260 px bottom)",
+   "kind": "proxy",
+   "metric": "safe_area_violations",
+   "params": {
+    "margins": [
+     72,
+     150,
+     72,
+     260
+    ]
+   },
+   "op": "eq",
+   "target": 0
+  },
+  {
+   "id": "OVERLAP",
+   "description": "No two text boxes overlap",
+   "kind": "proxy",
+   "metric": "text_overlap_violations",
+   "op": "eq",
+   "target": 0
+  },
+  {
+   "id": "HOLD",
+   "description": "Every headline and the CTA stay fully unchanged for at least 2 s",
+   "kind": "proxy",
+   "metric": "minimum_text_hold_s",
+   "params": {
+    "ids": [
+     "lane.head",
+     "studio.head",
+     "reps.head",
+     "session.head",
+     "match.head",
+     "close.word",
+     "close.cta",
+     "close.url"
+    ]
+   },
+   "op": "ge",
+   "target": 2.0
+  },
+  {
+   "id": "DEAD-TIME",
+   "description": "No decoded interval longer than 1.5 s without visible change",
+   "kind": "proxy",
+   "metric": "max_static_hold_s",
+   "op": "le",
+   "target": 1.5
+  },
+  {
+   "id": "POPS",
+   "description": "No one-frame flashes or jumps",
+   "kind": "proxy",
+   "metric": "single_frame_pops",
+   "op": "eq",
+   "target": 0
+  },
+  {
+   "id": "TRUTH",
+   "description": "Only the approved ATL facts; no tech, pricing, address, hours, date, stats or testimonials",
+   "kind": "human",
+   "rubric": "Watch the full decoded video with sound. Every on-screen claim must trace to the brief's fact list (4 half-court lanes, The Wall, programmable ball machines, human coaching, Seattle, pre-opening, continuity line, atennislab.com, join the waitlist). No AI/smart/algorithm wording or imagery that implies it, no prices, address, hours, opening date, invented numbers or testimonials. Graphic marks are illustrative, not data. Owner must verify facts before publication."
+  },
+  {
+   "id": "CRAFT",
+   "description": "Premium, serious training-brand feel; 3D reads as a real space",
+   "kind": "human",
+   "rubric": "At normal speed with sound: is the tone serious and premium (not cute or meme)? Do light, depth and the continuous camera read as one physical studio? Is every line readable at pace? Does the lane-to-match-court move read as practice carrying into matches? Cite timestamps."
+  },
+  {
+   "id": "BRAND",
+   "description": "Wordmark and closing card are acceptable to the ATL owner",
+   "kind": "human",
+   "rubric": "ATL owner decides whether the typeset 'A Tennis Lab' wordmark, colours and closing card are on brand. No official logo asset was supplied."
+  }
+ ]
+}
