@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Studio</title>
+<!--
+  Short three.js clip (contract: examples/three-studio.json). A product shot: one object on a seamless
+  paper cove under two rect-area softboxes and a rim light, with a soft contact shadow, a turntable move
+  and shallow depth of field. Light theme: no bloom except the status ring. Everything is set from t.
+-->
+<style>
+  @font-face { font-family: "Inter"; src: url("/assets/fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
+  @font-face { font-family: "JBMono"; src: url("/assets/fonts/JetBrainsMono.ttf") format("truetype"); font-weight: 100 800; }
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  #stage { position: relative; width: 1280px; height: 720px; overflow: hidden; background: #EDE9E2; transform-origin: 0 0;
+           font-family: "Inter", sans-serif; color: #1B1A18; }
+  canvas { position: absolute; left: 0; top: 0; }
+  .abs { position: absolute; left: 0; top: 0; white-space: nowrap; }
+  .kicker { font: 600 22px/1.2 "JBMono", monospace; letter-spacing: 0.24em; color: #4A2E24; }
+  .title { font-weight: 800; font-size: 60px; line-height: 1.04; letter-spacing: -0.035em; }
+  .mask { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 0.05em 0.12em 0; margin-bottom: -0.12em; }
+  .word { display: inline-block; }
+  .caption { font-size: 24px; line-height: 1.4; color: #3D3A35; white-space: normal; width: 400px; }
+  .label { font: 500 22px/1.2 "JBMono", monospace; color: #2B2926; }
+  .rule { position: absolute; left: 0; top: 0; height: 2px; background: #2B2926; transform-origin: 0 50%; }
+</style>
+<script type="importmap">{ "imports": { "three": "/compositions/_vendor/three/build/three.module.js",
+                                         "three/addons/": "/compositions/_vendor/three/addons/" } }</script>
+</head>
+<body>
+<div id="stage"><canvas id="gl" width="1280" height="720"></canvas><div id="dom"></div></div>
+<script type="module">
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { BokehPass } from "three/addons/postprocessing/BokehPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
+import { clamp, lerp, ease, easeOut, smooth, spring, seeded, loadContract, el, show, place, maskedWords, riseWords, preview } from "/compositions/_lib/clip.js";
+
+const W = 1280, H = 720;
+const vch = (window.__vch = window.__vch || {});
+let renderer, composer, scene, camera, bokeh, product, ring, practical, key, fill, rim, C, T, TEXT;
+const LIGHTS = [["light.key", "1  key", 4.6], ["light.fill", "2  fill", 1.6], ["light.rim", "3  rim", 7.5]];
+
+// A woven fabric texture (seeded, built once): warp and weft threads with slight colour noise.
+function weave() {
+  const c = document.createElement("canvas"); c.width = c.height = 256;
+  const g = c.getContext("2d"), rand = seeded(11);
+  g.fillStyle = "#B8B8B8"; g.fillRect(0, 0, 256, 256);
+  for (let y = 0; y < 256; y += 4) for (let x = 0; x < 256; x += 4) {
+    const over = ((x + y) / 4) % 2 === 0, v = Math.round(150 + 70 * rand() + (over ? 30 : -20));
+    g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(x, y, over ? 4 : 3, over ? 3 : 4);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(6, 8); tex.colorSpace = THREE.NoColorSpace;
+  return tex;
+}
+const dom = document.getElementById("dom");
+
+// A paper cove: floor that curves up into the wall, extruded along x.
+function cove() {
+  const s = new THREE.Shape();
+  s.moveTo(-12, 0); s.lineTo(-3, 0); s.absarc(-3, 3, 3, -Math.PI / 2, 0, false);
+  s.lineTo(0, 12); s.lineTo(0.2, 12); s.lineTo(0.2, 3); s.absarc(-3, 3, 3.2, 0, -Math.PI / 2, true); s.lineTo(-12, -0.2); s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: 30, bevelEnabled: false, curveSegments: 48 });
+  g.translate(0, 0, -15); g.rotateY(Math.PI / 2);
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ color: "#D9D3C8", roughness: 0.96, envMapIntensity: 0.3 }));
+  m.position.set(0, -1.05, -2.6); m.receiveShadow = true;
+  return m;
+}
+
+function build() {
+  RectAreaLightUniformsLib.init();
+  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("gl"), antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+  renderer.toneMapping = THREE.AgXToneMapping; renderer.toneMappingExposure = 0.78;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color("#EDE9E2");
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.3;
+  camera = new THREE.PerspectiveCamera(30, W / H, 0.1, 80);
+  scene.add(cove());
+
+  product = new THREE.Group();
+  const body = new THREE.Mesh(new RoundedBoxGeometry(1.5, 2.0, 1.5, 6, 0.42),
+    new THREE.MeshPhysicalMaterial({ color: "#D9654F", roughness: 0.85, sheen: 1, sheenRoughness: 0.6, sheenColor: "#FFD9C9",
+                                     roughnessMap: weave(), bumpMap: weave(), bumpScale: 2.5 }));
+  body.castShadow = true; body.receiveShadow = true; product.add(body);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.08, 64),
+    new THREE.MeshStandardMaterial({ color: "#C9CCD2", metalness: 1, roughness: 0.28 }));
+  cap.position.y = 1.02; cap.castShadow = true; product.add(cap);
+  ring = new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.022, 12, 96),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(1, 0.9, 0.75), toneMapped: false }));
+  ring.rotation.x = Math.PI / 2; ring.position.y = 1.065; product.add(ring);
+  // The ring is a practical light: when it turns on it warms the cove and the top of the object.
+  practical = new THREE.PointLight("#FFB070", 0, 7, 2); practical.position.set(0, 1.4, 0.2); product.add(practical);
+  for (let k = 0; k < 3; k++) {
+    const dot = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 0.02, 24), new THREE.MeshStandardMaterial({ color: "#2B2926", roughness: 0.5 }));
+    dot.position.set(-0.16 + 0.16 * k, 1.07, 0.3); product.add(dot);
+  }
+  product.position.y = -0.05; scene.add(product);
+
+  key = new THREE.RectAreaLight("#FFF4E8", 4.2, 3.2, 2.4); scene.add(key);
+  fill = new THREE.RectAreaLight("#E8F0FF", 0, 3, 3); fill.position.set(3.6, 1.6, 2.6); fill.lookAt(0, 0.3, 0); scene.add(fill);
+  rim = new THREE.RectAreaLight("#FFFFFF", 7, 1.2, 3.4); scene.add(rim);
+  const sun = new THREE.DirectionalLight("#FFFFFF", 1.4); sun.position.set(-2.5, 6, 3); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048); sun.shadow.radius = 9; sun.shadow.blurSamples = 16;
+  Object.assign(sun.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: 1, far: 16 }); scene.add(sun);
+  renderer.shadowMap.type = THREE.VSMShadowMap;
+
+  const target = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, target);
+  composer.addPass(new RenderPass(scene, camera));
+  bokeh = new BokehPass(scene, camera, { focus: 6.5, aperture: 0.0003, maxblur: 0.005 });
+  composer.addPass(bokeh);
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.35, 0.25, 0.96));
+  composer.addPass(new OutputPass());
+}
+
+function buildText() {
+  const kicker = el(dom, "abs kicker", "STUDIO", "kicker");
+  const title = el(dom, "abs title", undefined, "title");
+  const words = maskedWords(title, "One object, three lights.");
+  const caption = el(dom, "abs caption", "Key, fill and rim, switched on one at a time; the soft shadow says where it stands.", "caption");
+  const legend = LIGHTS.map(([, text], i) => el(dom, "abs label", text, `legend.${i}`));
+  const fabric = el(dom, "abs label", "sheen fabric", "label.fabric");
+  const metal = el(dom, "abs label", "brushed metal", "label.metal");
+  const ruleA = el(dom, "rule"), ruleB = el(dom, "rule");
+  TEXT = { kicker, title, words, caption, fabric, metal, ruleA, ruleB, legend };
+}
+
+const project = (v) => { const p = v.clone().project(camera); return [(p.x + 1) / 2 * W, (1 - p.y) / 2 * H]; };
+function callout(label, rule, point, dx, dy, t, at) {
+  const [px, py] = project(point), on = smooth((t - at) / 0.3), grow = easeOut((t - at) / 0.4);
+  const lx = clamp(px + dx, 64, W - 64 - 200), ly = clamp(py + dy, 40, H - 76);
+  place(label, lx, ly, "l", on);
+  const x0 = px, y0 = py, x1 = lx - 8, y1 = ly + 14, len = Math.hypot(x1 - x0, y1 - y0);
+  rule.style.width = `${(len * grow).toFixed(2)}px`;
+  rule.style.transform = `translate(${x0.toFixed(2)}px, ${y0.toFixed(2)}px) rotate(${Math.atan2(y1 - y0, x1 - x0).toFixed(4)}rad)`;
+  rule.style.opacity = on.toFixed(3);
+}
+
+function seek(t) {
+  const u = t / T.duration;
+  product.rotation.y = lerp(-1.1, 2.6, (t - C("turn.start") * 0) / T.duration);
+  const lit = smooth((t - C("ring.on")) / 0.12), pulse = t >= C("ring.pulse") ? Math.exp(-(t - C("ring.pulse")) / 0.4) : 0;
+  ring.material.color.setRGB(1, 0.9, 0.75).multiplyScalar(0.25 + 1.6 * lit + 2.2 * pulse);
+  practical.intensity = 2.6 * lit + 6 * pulse;
+  // The three lights come on one at a time (that is the clip's subject), then the key slides across the front.
+  const level = LIGHTS.map(([name, , peak]) => peak * smooth((t - C(name)) / 0.18));
+  key.intensity = level[0]; fill.intensity = level[1]; rim.intensity = level[2];
+  key.position.set(lerp(-4.2, -0.6, u), 2.6, 2.8); key.lookAt(0, 0.3, 0);
+  rim.position.set(lerp(2.6, 0.4, u), 2.4, -2.6); rim.lookAt(0, 0.6, 0);
+  const push = t >= C("turn.start") ? 0.05 * easeOut((t - C("turn.start")) / 0.25) : 0;
+  const radius = lerp(8.6, 5.8, ease(u)) * (1 - push), angle = lerp(1.15, -0.2, u);
+  camera.position.set(Math.sin(angle) * radius, lerp(1.25, 1.75, ease(u)), Math.cos(angle) * radius);
+  camera.lookAt(-0.85, 0.35, 0);
+  camera.updateMatrixWorld();
+  bokeh.uniforms.focus.value = camera.position.distanceTo(product.position);
+  composer.render();
+  place(TEXT.kicker, 64, 52, "l", smooth((t - C("title.in") + 0.2) / 0.3));
+  place(TEXT.title, 64, 86, "l", 1); riseWords(TEXT.words, t, C("title.in"));
+  place(TEXT.caption, 64, 240, "l", smooth((t - C("caption.in")) / 0.4));
+  TEXT.legend.forEach((e, i) => {
+    const on = t >= C(LIGHTS[i][0]);
+    e.textContent = `${on ? "●" : "○"} ${LIGHTS[i][1]}`;
+    e.style.color = "#1B1A18";
+    place(e, 64, 360 + 36 * i, "l", smooth((t - C("title.in") - 0.3) / 0.3));
+  });
+  callout(TEXT.fabric, TEXT.ruleA, new THREE.Vector3(0.75, 0.15, 0.55).applyAxisAngle(new THREE.Vector3(0, 1, 0), 0), 150, 70, t, C("label.fabric"));
+  callout(TEXT.metal, TEXT.ruleB, new THREE.Vector3(0.45, 1.06, 0.2), 170, -80, t, C("label.metal"));
+}
+
+vch.seek = seek;
+vch.ready = loadContract("/examples/three-studio.json").then((loaded) => {
+  C = loaded.cue; T = { duration: loaded.contract.video.duration };
+  build(); buildText();
+  if (!loaded.harness) preview(document.getElementById("stage"), W, H, T.duration, seek);
+});
+</script>
+</body>
+</html>

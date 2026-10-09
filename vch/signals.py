@@ -45,6 +45,14 @@ DENSITY_EVERY_S = 0.5
 EDGE_STEP = 24.0
 CELL_GRID = (12, 6)
 CELL_EDGE_FRACTION = 0.02
+STYLE_EVERY_S = 1.0
+HUE_BINS = 12
+HUE_NAMES = ("red", "orange", "yellow", "lime", "green", "teal", "cyan", "azure", "blue", "violet", "magenta", "rose")
+VIVID_SATURATION, VIVID_VALUE = 0.35, 0.25
+MIN_VIVID_FOR_HUE = 0.02
+PALETTE_MIN_SHARE = 0.01
+# Typical spread of each descriptor across the 511 measured corpus posters (p90 - p10, rounded).
+STYLE_SCALES = {"luma": 0.72, "vivid_share": 0.64, "colourfulness": 75.0, "edge_density": 0.17, "palette": 19.0}
 
 
 def analysis_size(width: int, height: int) -> tuple[int, int]:
@@ -156,6 +164,68 @@ def frame_density(rgb: np.ndarray) -> dict[str, float]:
     colourfulness = math.hypot(rg.std(), yb.std()) + 0.3 * math.hypot(rg.mean(), yb.mean())
     return {"edge_density": float(edges.mean()), "used_cells": float((cells >= CELL_EDGE_FRACTION).mean()),
             "colourfulness": float(colourfulness)}
+
+
+def _hue_saturation(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    f = rgb.astype(np.float64) / 255
+    top, low = f.max(axis=2), f.min(axis=2)
+    delta = top - low
+    sat = np.where(top > 0, delta / np.maximum(top, 1e-9), 0.0)
+    r, g, b = f[..., 0], f[..., 1], f[..., 2]
+    hue = np.zeros_like(top)
+    chroma = delta > 1e-9
+    red = chroma & (top == r)
+    green = chroma & (top == g) & ~red
+    blue = chroma & ~red & ~green
+    hue[red] = ((g - b)[red] / delta[red]) % 6
+    hue[green] = (b - r)[green] / delta[green] + 2
+    hue[blue] = (r - g)[blue] / delta[blue] + 4
+    return hue / 6, sat, top
+
+
+def style_features(rgb: np.ndarray) -> dict[str, Any]:
+    """Style descriptors of one frame: brightness, how much is vivid, which hues, how many colours.
+
+    vivid = saturation > 0.35 and value > 0.25; hue_share is over 12 equal hue bins of vivid pixels.
+    palette = 4-bit-per-channel colours that each cover at least 1% of the frame.
+    """
+    hue, sat, value = _hue_saturation(rgb)
+    vivid = (sat > VIVID_SATURATION) & (value > VIVID_VALUE)
+    # Bins are centred on their names (red = 345..15 degrees).
+    bins = np.bincount(np.floor(hue[vivid] * HUE_BINS + 0.5).astype(int) % HUE_BINS, minlength=HUE_BINS)
+    share = bins / max(1, int(vivid.sum()))
+    quantized = (rgb // 16).astype(np.int32)
+    keys = (quantized[..., 0] * 16 + quantized[..., 1]) * 16 + quantized[..., 2]
+    counts = np.bincount(keys.ravel(), minlength=4096) / keys.size
+    luma = _luma(rgb) / 255
+    density = frame_density(rgb)
+    return {"luma": float(luma.mean()), "vivid_share": float(vivid.mean()), "hue_share": share.tolist(),
+            "palette": int((counts >= PALETTE_MIN_SHARE).sum()), "colourfulness": density["colourfulness"],
+            "edge_density": density["edge_density"]}
+
+
+def decoded_style(path: Path, *, width: int, height: int, every: float = STYLE_EVERY_S) -> dict[str, Any]:
+    """style_features of decoded frames sampled every `every` s; medians, and the mean hue distribution."""
+    scale = DENSITY_MAX_SIDE / max(width, height)
+    size = (max(CELL_GRID[0], 2 * round(width * scale / 2)), max(CELL_GRID[1], 2 * round(height * scale / 2)))
+    frames = [style_features(rgb) for rgb in _decoded_frames(path, size=size, max_fps=1 / every)]
+    if not frames:
+        raise ValueError(f"No decodable frames in {path}")
+    result: dict[str, Any] = {"frames": len(frames), "every_s": every}
+    for key in ("luma", "vivid_share", "palette", "colourfulness", "edge_density"):
+        result[key] = round(float(np.median([f[key] for f in frames])), 4)
+    hues = np.mean([f["hue_share"] for f in frames], axis=0)
+    result["hue_share"] = [round(float(x), 4) for x in hues]
+    result["dominant_hue"] = HUE_NAMES[int(np.argmax(hues))] if result["vivid_share"] >= MIN_VIVID_FOR_HUE else "neutral"
+    return result
+
+
+def style_distance(a: dict[str, Any], b: dict[str, Any]) -> float:
+    """Distance between two decoded_style summaries (0 = same descriptors). A spread measure, not taste."""
+    scalars = sum(((a[k] - b[k]) / scale) ** 2 for k, scale in STYLE_SCALES.items())
+    weight_a, weight_b = min(1.0, a["vivid_share"] / MIN_VIVID_FOR_HUE), min(1.0, b["vivid_share"] / MIN_VIVID_FOR_HUE)
+    hues = 0.5 * float(np.abs(np.array(a["hue_share"]) * weight_a - np.array(b["hue_share"]) * weight_b).sum())
+    return round(math.sqrt(scalars + hues ** 2), 3)
 
 
 def decoded_density(path: Path, *, width: int, height: int, every: float = DENSITY_EVERY_S) -> dict[str, Any]:

@@ -106,6 +106,18 @@ Two original HTML examples:
   python -m vch profile-compare reference-profile/profile.json runs/hc-001-profile/profile.json
   ```
 
+  The same film takes style packs: `--style styles/paper-swiss.json` or
+  `--style styles/phosphor-terminal.json`. `vch diversity` measures how far apart the variants are.
+
+- **`examples/three-*.json`**: six 8-second three.js clips with real lighting, materials and lens
+  effects: prism, studio, city, orbit, pulse and paper. Each passes the same machine checks, and
+  `vch diversity` puts them as far apart as typical corpus films. Three.js is vendored under
+  `compositions/_vendor/` and declared as one folder asset.
+
+  ```sh
+  python -m vch run examples/three-prism.json --out runs/three-prism-001 --trust-scene-code
+  ```
+
 - **`examples/html.json`**: `compositions/code-to-frames/index.html`, a 12-second minimal film used
   by the browser tests:
 
@@ -254,6 +266,7 @@ claim. A malicious scene can lie in telemetry; inspect decoded frames independen
 | `vch/html_backend.py`, `vch/html_runtime.js` | HTML composition renderer and injected seek/telemetry runtime |
 | `vch/signals.py`, `vch/audio.py`, `vch/tools.py` | Decoded-media signals, cue/mix audio, stills/storyboard/profile tools |
 | `compositions/` | Agent-editable HTML compositions (`how-code-becomes-video`, `code-to-frames`) |
+| `styles/` | Style packs (design tokens by role) that compositions read from `contract.style` |
 | `backends/pdoom/` | Original browser scene system + pinned MIT pdoom primitives |
 | `benchmarks/reference/` | Prompt, fixed contract, saved response and execution results |
 | `scenes/` | Agent-editable pure-time scene modules |

@@ -24,28 +24,34 @@
   @font-face { font-family: "Inter"; src: url("/assets/fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
   @font-face { font-family: "JBMono"; src: url("/assets/fonts/JetBrainsMono.ttf") format("truetype"); font-weight: 100 800; }
   html, body { margin: 0; background: #000; overflow: hidden; }
-  #stage { position: relative; width: 1920px; height: 1080px; overflow: hidden; background: #060B18;
-           font-family: "Inter", sans-serif; color: #EEF3FF; transform-origin: 0 0; }
+  #stage { --bg: #060B18; --ink: #EEF3FF; --soft: #AAB7D8; --dim: #8592B5; --note: #C9D3EC; --accent: #46E3B7;
+           --on-fill: #06101F; --code: #DCE4F7; --keyword: #C3A6FF; --call: #7AA7FF; --display: "Inter"; --text: "Inter";
+           --mono: "JBMono"; --headline-size: 64px; --headline-weight: 720; --headline-spacing: -0.028em; --desc-size: 30px;
+           --finale-size: 92px; --finale-weight: 760; --finale-spacing: -0.035em;
+           position: relative; width: 1920px; height: 1080px; overflow: hidden; background: var(--bg);
+           font-family: var(--text), sans-serif; color: var(--ink); transform-origin: 0 0; }
   #world { position: absolute; left: 0; top: 0; }
   #dom { position: absolute; left: 0; top: 0; width: 1920px; height: 1080px; }
   .abs { position: absolute; left: 0; top: 0; white-space: nowrap; }
-  .mono { font-family: "JBMono", monospace; font-variant-ligatures: none; }
+  .mono { font-family: var(--mono), monospace; font-variant-ligatures: none; }
   .block { position: absolute; left: 96px; top: 150px; width: 800px; }
-  .kicker { font: 600 24px/1.2 "JBMono", monospace; letter-spacing: 0.14em; color: #46E3B7; }
-  .headline { margin-top: 22px; font-weight: 720; font-size: 64px; line-height: 1.08; letter-spacing: -0.028em; }
+  .kicker { font: 600 24px/1.2 var(--mono), monospace; letter-spacing: 0.14em; color: var(--accent); }
+  .headline { margin-top: 22px; font-family: var(--display), sans-serif; font-weight: var(--headline-weight); font-size: var(--headline-size);
+              line-height: 1.08; letter-spacing: var(--headline-spacing); }
   .mask { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 0.05em 0.12em 0; margin-bottom: -0.12em; }
   .word { display: inline-block; }
-  .desc { margin-top: 24px; font-size: 30px; line-height: 1.36; color: #AAB7D8; width: 740px; }
-  .note { margin-top: 26px; font-size: 26px; line-height: 1.4; color: #C9D3EC; width: 720px; }
+  .desc { margin-top: 24px; font-size: var(--desc-size); line-height: 1.36; color: var(--soft); width: 740px; }
+  .note { margin-top: 26px; font-size: 26px; line-height: 1.4; color: var(--note); width: 720px; }
   .stat { margin-top: 18px; display: flex; gap: 18px; align-items: baseline; }
-  .stat .num { font: 700 34px/1.2 "JBMono", monospace; min-width: 236px; }
-  .stat .what { font-size: 26px; line-height: 1.3; color: #C9D3EC; white-space: normal; width: 480px; }
-  .finale { font-weight: 760; font-size: 92px; line-height: 1.04; letter-spacing: -0.035em; width: 1000px; }
-  .label { font: 500 24px/1.2 "JBMono", monospace; color: #AAB7D8; }
-  .sans { font-family: "Inter", sans-serif; font-weight: 500; }
-  .chip { font: 700 24px/1.2 "JBMono", monospace; color: #06101F; }
-  .code { font: 500 24px/1.2 "JBMono", monospace; color: #DCE4F7; }
-  .k { color: #C3A6FF; } .f { color: #7AA7FF; } .n { color: #46E3B7; } .p { color: #8592B5; }
+  .stat .num { font: 700 34px/1.2 var(--mono), monospace; min-width: 236px; }
+  .stat .what { font-size: 26px; line-height: 1.3; color: var(--note); white-space: normal; width: 480px; }
+  .finale { font-family: var(--display), sans-serif; font-weight: var(--finale-weight); font-size: var(--finale-size); line-height: 1.04;
+            letter-spacing: var(--finale-spacing); width: 1000px; }
+  .label { font: 500 24px/1.2 var(--mono), monospace; color: var(--soft); }
+  .sans { font-family: var(--text), sans-serif; font-weight: 500; }
+  .chip { font: 700 24px/1.2 var(--mono), monospace; color: var(--on-fill); }
+  .code { font: 500 24px/1.2 var(--mono), monospace; color: var(--code); }
+  .k { color: var(--keyword); } .f { color: var(--call); } .n { color: var(--accent); } .p { color: var(--dim); }
 </style>
 </head>
 <body>
@@ -61,14 +67,52 @@
   const vch = (window.__vch = window.__vch || {});
   const harness = Boolean(vch.harness);
 
-  const C = {
-    ink: "#EEF3FF", soft: "#AAB7D8", dim: "#8592B5", mint: "#46E3B7", blue: "#7AA7FF",
-    violet: "#B69CFF", amber: "#FFC857", coral: "#FF7A70", panel: "rgba(12,21,44,0.94)",
-    edge: "#2A3B66", well: "#0A1226", lane: "#0F1B38", dark: "#06101F",
+  // ---------- style: every colour, typeface and finish comes from contract.style (default: night blueprint) ----------
+  // Roles, not hues: accent/second/third/fourth/alert are the five signal colours; the rest are surfaces.
+  const NIGHT_BLUEPRINT = {
+    name: "night-blueprint", mode: "dark",
+    type: { display: "Inter", text: "Inter", mono: "JBMono", headline: 64, headlineWeight: 720, headlineSpacing: "-0.028em",
+            desc: 30, finale: 92, finaleWeight: 760, finaleSpacing: "-0.035em", wrapScale: 1 },
+    color: {
+      bg: "#060B18", sky: ["#0C1532", "#081026", "#050914"], haze: "#3D63D8",
+      ink: "#EEF3FF", soft: "#AAB7D8", dim: "#8592B5", note: "#C9D3EC", code: "#DCE4F7", keyword: "#C3A6FF",
+      accent: "#46E3B7", second: "#7AA7FF", third: "#B69CFF", fourth: "#FFC857", alert: "#FF7A70",
+      onDark: "#FFFFFF", onLight: "#06101F",
+      panel: ["rgba(22,36,74,0.96)", "rgba(13,23,48,0.95)", "rgba(9,16,35,0.95)"], rim: "#A0BEFF", edge: "#2A3B66",
+      well: "#0A1226", lane: "#0F1B38", grid: "#7A96DC", highlight: "#7AA7FF", card: "#22325E", cardFace: "#13214A",
+      page: "#EAF0FF", pageLine: "#9FB0D6", film: "#2C3E6E", gate: "#25365F", gateLit: "#3A5BA8", trace: "#8FA2D0",
+      meter: "#16244A", off: "#33456F", scrim: "#050914", shadow: "#000000", vignette: "#000000",
+      ghost: ["#C9D3EC", "#5D6C95", "#3A4A75", "#1B2A52"],
+    },
+    finish: { bloom: 0.3, grain: 0.05, scanlines: 0, vignette: 0.45, glow: 1, shadow: 0.55, beam: 1, shade: [1, 0.62, 0.42] },
   };
-  const KIND_COLOR = { hard: C.blue, proxy: C.mint, human: C.amber };
-  const CUE_COLOR = { whoosh: C.violet, impact: C.coral, chime: C.amber, tick: C.mint };
-  const CATEGORY_COLOR = { motion: C.blue, interactive: C.violet, explainer: C.mint, "3D": C.amber };
+  const C = {}, KIND_COLOR = {}, CUE_COLOR = {}, CATEGORY_COLOR = {};
+  let S = NIGHT_BLUEPRINT;
+  const isObject = (x) => x && typeof x === "object" && !Array.isArray(x);
+  const merge = (base, over) => Object.fromEntries([...new Set([...Object.keys(base), ...Object.keys(over || {})])].map((k) =>
+    [k, isObject(base[k]) && isObject(over?.[k]) ? merge(base[k], over[k]) : over?.[k] ?? base[k]]));
+  function applyStyle(style) {
+    S = merge(NIGHT_BLUEPRINT, style || {});
+    const c = S.color, ty = S.type;
+    Object.assign(C, { ink: c.ink, soft: c.soft, dim: c.dim, accent: c.accent, second: c.second, third: c.third, fourth: c.fourth,
+                       alert: c.alert, edge: c.edge, well: c.well, lane: c.lane });
+    Object.assign(KIND_COLOR, { hard: c.second, proxy: c.accent, human: c.fourth });
+    Object.assign(CUE_COLOR, { whoosh: c.third, impact: c.alert, chime: c.fourth, tick: c.accent });
+    Object.assign(CATEGORY_COLOR, { motion: c.second, interactive: c.third, explainer: c.accent, "3D": c.fourth });
+    const vars = { "--bg": c.bg, "--ink": c.ink, "--soft": c.soft, "--dim": c.dim, "--note": c.note, "--accent": c.accent,
+                   "--on-fill": onFill(c.accent), "--code": c.code, "--keyword": c.keyword, "--call": c.second,
+                   "--display": `"${ty.display}"`, "--text": `"${ty.text}"`, "--mono": `"${ty.mono}"`,
+                   "--headline-size": `${ty.headline}px`, "--headline-weight": ty.headlineWeight, "--headline-spacing": ty.headlineSpacing,
+                   "--desc-size": `${ty.desc}px`, "--finale-size": `${ty.finale}px`, "--finale-weight": ty.finaleWeight,
+                   "--finale-spacing": ty.finaleSpacing };
+    for (const [k, v] of Object.entries(vars)) $("stage").style.setProperty(k, String(v));
+  }
+  // Text on a filled shape: whichever of the style's dark and light inks contrasts more with the fill.
+  const luminance = (h) => hex(h).map((v) => v / 255).map((v) => (v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+    .reduce((sum, v, i) => sum + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const contrast = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const onFill = (fill) => (contrast(fill, S.color.onDark) >= contrast(fill, S.color.onLight) ? S.color.onDark : S.color.onLight);
+  const dark = () => S.mode !== "light";
 
   // ---------- pure time helpers ----------
   const clamp = (x, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, x));
@@ -217,7 +261,8 @@
   const rgba = (h, a = 1, f = 1) => { const [r, g, b] = hex(h); return `rgba(${Math.round(r * f)},${Math.round(g * f)},${Math.round(b * f)},${a})`; };
   const materials = {};
   function material(h) {
-    return materials[h] || (materials[h] = { top: rgba(h, 1, 1), front: rgba(h, 1, 0.62), side: rgba(h, 1, 0.42) });
+    const [top, front, side] = S.finish.shade;
+    return materials[h] || (materials[h] = { top: rgba(h, 1, top), front: rgba(h, 1, front), side: rgba(h, 1, side) });
   }
   function poly(g, pts) {
     g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
@@ -239,7 +284,8 @@
     g.globalAlpha = 1;
     return [e, f, gg, h];
   }
-  function glow(g, x, y, r, color, alpha) {
+  function glow(g, x, y, r, color, strength) {
+    const alpha = strength * S.finish.glow;
     if (alpha <= 0.002) return;
     const grad = g.createRadialGradient(x, y, 0, x, y, r);
     grad.addColorStop(0, rgba(color, alpha)); grad.addColorStop(1, rgba(color, 0));
@@ -249,9 +295,9 @@
   // ---------- world: background, floor, conveyor ----------
   function background(g) {
     const sky = g.createLinearGradient(0, 0, 0, H);
-    sky.addColorStop(0, "#0C1532"); sky.addColorStop(0.6, "#081026"); sky.addColorStop(1, "#050914");
+    sky.addColorStop(0, S.color.sky[0]); sky.addColorStop(0.6, S.color.sky[1]); sky.addColorStop(1, S.color.sky[2]);
     g.fillStyle = sky; g.fillRect(0, 0, W, H);
-    glow(g, 1380, 430, 900, "#3D63D8", 0.12);
+    glow(g, 1380, 430, 900, S.color.haze, 0.12);
   }
 
   function floorGrid(g, cam, mini) {
@@ -273,7 +319,7 @@
     }
     const r = mini ? 4 : 1.6;
     buckets.forEach((pts, b) => {
-      g.fillStyle = `rgba(122,150,220,${(0.1 + 0.12 * b).toFixed(2)})`;
+      g.fillStyle = rgba(S.color.grid, (0.1 + 0.12 * b).toFixed(2));
       g.beginPath();
       for (let i = 0; i < pts.length; i += 2) g.rect(pts[i] - r, pts[i + 1] - r, 2 * r, 2 * r);
       g.fill();
@@ -292,7 +338,7 @@
       const a = P(x - 0.7, -1.7), b = P(x + 0.5, 0), c = P(x - 0.7, 1.7);
       if (b[0] < -20 || b[0] > W + 20) continue;
       const near = cardX === null ? 0 : Math.exp(-Math.abs(x - cardX) / 12);
-      g.strokeStyle = rgba(C.blue, 0.14 + 0.36 * near);
+      g.strokeStyle = rgba(C.second, 0.14 + 0.36 * near);
       g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.lineTo(c[0], c[1]); g.stroke();
     }
   }
@@ -366,25 +412,25 @@
   function cardSkin(t, state) {
     const g = cardCanvas.getContext("2d");
     g.setTransform(1, 0, 0, 1, 0, 0);
-    g.fillStyle = "#13214A"; g.fillRect(0, 0, 360, 240);
+    g.fillStyle = S.color.cardFace; g.fillRect(0, 0, 360, 240);
     const skin = (i, alpha) => {
       g.globalAlpha = alpha;
       if (i === 0) {
-        g.fillStyle = "#EAF0FF"; g.fillRect(24, 24, 312, 192);
-        for (let r = 0; r < 7; r++) { g.fillStyle = r === 0 ? C.mint : "#9FB0D6"; g.fillRect(48, 48 + r * 24, r === 0 ? 120 : 200 + 60 * hash(r), 10); }
+        g.fillStyle = S.color.page; g.fillRect(24, 24, 312, 192);
+        for (let r = 0; r < 7; r++) { g.fillStyle = r === 0 ? C.accent : S.color.pageLine; g.fillRect(48, 48 + r * 24, r === 0 ? 120 : 200 + 60 * hash(r), 10); }
       } else if (i === 1) {
-        g.fillStyle = "#0A1226"; g.fillRect(16, 16, 328, 208);
-        const palette = [C.violet, C.blue, C.mint, C.soft];
+        g.fillStyle = C.well; g.fillRect(16, 16, 328, 208);
+        const palette = [C.third, C.second, C.accent, C.soft];
         for (let r = 0; r < 7; r++) for (let c = 0; c < 3; c++) {
           g.fillStyle = palette[(r + c) % 4]; g.fillRect(36 + c * 90 + 20 * (r % 3), 36 + r * 26, 40 + 40 * hash(r * 3 + c), 10);
         }
       } else if (i === 2) {
-        for (let k = 0; k < 3; k++) { g.fillStyle = k === 1 ? C.mint : "#2C3E6E"; g.fillRect(24 + k * 108, 60, 96, 120); }
+        for (let k = 0; k < 3; k++) { g.fillStyle = k === 1 ? C.accent : S.color.film; g.fillRect(24 + k * 108, 60, 96, 120); }
       } else if (i === 3) {
-        g.fillStyle = C.violet;
+        g.fillStyle = C.third;
         for (let k = 0; k < 40; k++) { const h = 12 + 70 * Math.abs(Math.sin(k * 0.7)) * hash(k); g.fillRect(20 + k * 8, 120 - h / 2, 5, h); }
       } else {
-        for (let r = 0; r < 6; r++) { g.fillStyle = r === 3 ? C.coral : C.mint; g.fillRect(36, 40 + r * 30, 14, 14); g.fillStyle = "#9FB0D6"; g.fillRect(64, 42 + r * 30, 150 + 90 * hash(r + 40), 10); }
+        for (let r = 0; r < 6; r++) { g.fillStyle = r === 3 ? C.alert : C.accent; g.fillRect(36, 40 + r * 30, 14, 14); g.fillStyle = S.color.pageLine; g.fillRect(64, 42 + r * 30, 150 + 90 * hash(r + 40), 10); }
       }
       g.globalAlpha = 1;
     };
@@ -399,10 +445,10 @@
     const x0 = state.x - w / 2, y0 = state.y - d / 2, z0 = state.z;
     if (z0 > 0.6) {
       g.globalAlpha = 0.35 * clamp(1 - z0 / 12);
-      g.fillStyle = "#000"; poly(g, [project(cam, x0, y0, 0), project(cam, x0 + w, y0, 0), project(cam, x0 + w, y0 + d, 0), project(cam, x0, y0 + d, 0)]); g.fill();
+      g.fillStyle = S.color.shadow; poly(g, [project(cam, x0, y0, 0), project(cam, x0 + w, y0, 0), project(cam, x0 + w, y0 + d, 0), project(cam, x0, y0 + d, 0)]); g.fill();
       g.globalAlpha = 1;
     }
-    const top = box(g, cam, x0, y0, z0, x0 + w, y0 + d, z0 + CARD.h, material("#22325E"));
+    const top = box(g, cam, x0, y0, z0, x0 + w, y0 + d, z0 + CARD.h, material(S.color.card));
     const [e, f, , h] = top;
     const skin = cardSkin(t, state);
     g.save();
@@ -410,7 +456,7 @@
     g.globalAlpha = state.morph < 1 ? 0.25 + 0.75 * state.morph : 1;
     g.drawImage(skin, 0, 0);
     g.restore();
-    if (state.morph < 1) { g.globalAlpha = 1 - state.morph; g.fillStyle = C.mint; poly(g, top); g.fill(); g.globalAlpha = 1; }
+    if (state.morph < 1) { g.globalAlpha = 1 - state.morph; g.fillStyle = C.accent; poly(g, top); g.fill(); g.globalAlpha = 1; }
     return top;
   }
 
@@ -421,7 +467,7 @@
   }
 
   function gate(g, cam, i, t) {
-    const x = STATION_X[i], state = stationState(i, t), m = material(state === 2 ? "#3A5BA8" : "#25365F");
+    const x = STATION_X[i], state = stationState(i, t), m = material(state === 2 ? S.color.gateLit : S.color.gate);
     const parts = [
       [x - 0.45, 4.2, 0, x + 0.45, 5.1, 4.4], [x - 0.45, -5.1, 4.4, x + 0.45, 5.1, 5.1], [x - 0.45, -5.1, 0, x + 0.45, -4.2, 4.4],
     ];
@@ -447,8 +493,8 @@
     return c;
   }
   function drawMini(g, t, x, y, w, h, mini, resolution = 1) {
-    g.fillStyle = "#0A1226"; g.fillRect(x, y, w, h);
-    if (mini) { g.fillStyle = "#1B2A52"; g.fillRect(x + w * 0.1, y + h * 0.2, w * 0.5, h * 0.12); return; }
+    g.fillStyle = C.well; g.fillRect(x, y, w, h);
+    if (mini) { g.fillStyle = S.color.ghost[3]; g.fillRect(x + w * 0.1, y + h * 0.2, w * 0.5, h * 0.12); return; }
     g.drawImage(miniature(t, Math.round(w * resolution), Math.round(h * resolution)), x, y, w, h);
   }
 
@@ -467,11 +513,11 @@
   function frame(g, w, h, alpha) {
     g.globalAlpha = alpha;
     const glass = g.createLinearGradient(0, 0, 0, h);
-    glass.addColorStop(0, "rgba(22,36,74,0.96)"); glass.addColorStop(0.18, "rgba(13,23,48,0.95)"); glass.addColorStop(1, "rgba(9,16,35,0.95)");
+    glass.addColorStop(0, S.color.panel[0]); glass.addColorStop(0.18, S.color.panel[1]); glass.addColorStop(1, S.color.panel[2]);
     roundRect(g, 0, 0, w, h, 18); g.fillStyle = glass; g.fill();
     g.lineWidth = 2; g.strokeStyle = C.edge; g.stroke();
     const rim = g.createLinearGradient(0, 0, w, 0);
-    rim.addColorStop(0, "rgba(160,190,255,0)"); rim.addColorStop(0.5, "rgba(160,190,255,0.35)"); rim.addColorStop(1, "rgba(160,190,255,0)");
+    rim.addColorStop(0, rgba(S.color.rim, 0)); rim.addColorStop(0.5, rgba(S.color.rim, 0.35)); rim.addColorStop(1, rgba(S.color.rim, 0));
     g.fillStyle = rim; g.fillRect(24, 1, w - 48, 2);
     g.globalAlpha = 1;
   }
@@ -513,7 +559,7 @@
       g.fillStyle = emitting ? C.ink : C.soft;
       const size = 16 * s;
       if (size > 0.1) { roundRect(g, 48 + 8 - size / 2, briefRowY(r) + 14 - size / 2, size, size, 4); g.fill(); }
-      if (mini && t >= at) { g.fillStyle = "#3A4A75"; g.fillRect(80, briefRowY(r) + 8, 220, 12); }
+      if (mini && t >= at) { g.fillStyle = S.color.ghost[2]; g.fillRect(80, briefRowY(r) + 8, 220, 12); }
     });
     const freeze = cue("brief.freeze"), lock = t >= freeze ? Math.exp(-(t - freeze) / 0.35) : 0;
     for (const kind of ["hard", "proxy", "human"]) {
@@ -550,24 +596,24 @@
 
   function codePanel(g, t, mini) {
     well(g, 0, 0, 580, 300);
-    [C.coral, C.amber, C.mint].forEach((c, i) => { g.fillStyle = rgba(c, 0.8); g.beginPath(); g.arc(28 + i * 22, 24, 7, 0, 7); g.fill(); });
+    [C.alert, C.fourth, C.accent].forEach((c, i) => { g.fillStyle = rgba(c, 0.8); g.beginPath(); g.arc(28 + i * 22, 24, 7, 0, 7); g.fill(); });
     g.fillStyle = C.edge; g.fillRect(0, 48, 580, 2);
     const scrub = codeScrub(t);
-    if (t >= cue("code.scrub")) { g.fillStyle = "rgba(122,167,255,0.10)"; g.fillRect(8, 58, 564, 36); }
-    if (mini) DATA.excerpt.forEach((l, i) => { if (l.text.trim()) { g.fillStyle = "#3A4A75"; g.fillRect(92, 66 + 36 * i, 12 * l.text.length, 12); } });
+    if (t >= cue("code.scrub")) { g.fillStyle = rgba(S.color.highlight, 0.1); g.fillRect(8, 58, 564, 36); }
+    if (mini) DATA.excerpt.forEach((l, i) => { if (l.text.trim()) { g.fillStyle = S.color.ghost[2]; g.fillRect(92, 66 + 36 * i, 12 * l.text.length, 12); } });
     well(g, 0, 316, 580, 138);
     const plotStart = cue("code.type3") + 0.25, tau = clamp(t - plotStart, 0, SPRING_DEMO.span);
     if (t >= plotStart) {
-      g.strokeStyle = rgba(C.amber, 0.8); g.lineWidth = 2; g.setLineDash([6, 6]);
+      g.strokeStyle = rgba(C.fourth, 0.8); g.lineWidth = 2; g.setLineDash([6, 6]);
       g.beginPath();
       for (let k = 0; k <= 120; k++) { const u = (k / 120) * tau, x = SPRING_X(u), y = SPRING_Y(springTarget(u)); k ? g.lineTo(x, y) : g.moveTo(x, y); }
       g.stroke(); g.setLineDash([]);
-      g.strokeStyle = C.mint; g.lineWidth = 3;
+      g.strokeStyle = C.accent; g.lineWidth = 3;
       g.beginPath();
       for (let k = 0; k <= 160; k++) { const u = (k / 160) * tau, x = SPRING_X(u), y = SPRING_Y(springValue(u)); k ? g.lineTo(x, y) : g.moveTo(x, y); }
       g.stroke();
-      glow(g, SPRING_X(tau), SPRING_Y(springValue(tau)), 22, C.mint, 0.9);
-      SPRING_DEMO.keys.forEach(([at]) => { if (tau >= at) { g.fillStyle = C.amber; g.beginPath(); g.arc(SPRING_X(at), 446, 4, 0, 7); g.fill(); } });
+      glow(g, SPRING_X(tau), SPRING_Y(springValue(tau)), 22, C.accent, 0.9);
+      SPRING_DEMO.keys.forEach(([at]) => { if (tau >= at) { g.fillStyle = C.fourth; g.beginPath(); g.arc(SPRING_X(at), 446, 4, 0, 7); g.fill(); } });
     }
     g.save(); g.lineWidth = 3; g.strokeStyle = C.edge; roundRect(g, 604, 0, 300, 169, 10); g.stroke(); g.restore();
     drawMini(g, scrub.ts, 604, 0, 300, 169, mini);
@@ -575,9 +621,9 @@
     g.fillStyle = C.edge; g.fillRect(24, 498, 856, 4);
     for (let s = 0; s <= DATA.duration; s += 6) { g.fillStyle = C.dim; g.fillRect(SCRUB_X(s) - 1, 488, 2, 24); }
     if (scrub.mode !== "live") {
-      const color = { forward: C.mint, reverse: C.blue, shuffled: C.amber }[scrub.mode];
-      if (scrub.mode === "forward") { g.fillStyle = rgba(C.mint, 0.5); g.fillRect(24, 497, SCRUB_X(scrub.ts) - 24, 6); }
-      (scrub.jumps || []).forEach((s) => { g.fillStyle = rgba(C.amber, 0.7); g.beginPath(); g.arc(SCRUB_X(s), 500, 7, 0, 7); g.fill(); });
+      const color = { forward: C.accent, reverse: C.second, shuffled: C.fourth }[scrub.mode];
+      if (scrub.mode === "forward") { g.fillStyle = rgba(C.accent, 0.5); g.fillRect(24, 497, SCRUB_X(scrub.ts) - 24, 6); }
+      (scrub.jumps || []).forEach((s) => { g.fillStyle = rgba(C.fourth, 0.7); g.beginPath(); g.arc(SCRUB_X(s), 500, 7, 0, 7); g.fill(); });
       glow(g, SCRUB_X(scrub.ts), 500, 40, color, 0.5);
       g.fillStyle = color; g.beginPath(); g.arc(SCRUB_X(scrub.ts), 500, 11, 0, 7); g.fill();
     }
@@ -613,8 +659,8 @@
       g.globalAlpha = 1;
     }
     if (encode > 0) {
-      g.globalAlpha = encode; roundRect(g, 600, 80, 260, 150, 14); g.fillStyle = "#13214A"; g.fill();
-      g.lineWidth = 3; g.strokeStyle = C.violet; g.stroke(); g.globalAlpha = 1;
+      g.globalAlpha = encode; roundRect(g, 600, 80, 260, 150, 14); g.fillStyle = S.color.cardFace; g.fill();
+      g.lineWidth = 3; g.strokeStyle = C.third; g.stroke(); g.globalAlpha = 1;
     }
     LANES.forEach((lane, li) => {
       const on = spring(t - cue(lane.cueName), 0.4, 0.8);
@@ -622,14 +668,16 @@
       const y = 396 + 58 * li;
       g.globalAlpha = clamp(on);
       well(g, 240, y, 664, 48);
+      // N sub-frame discs summed additively on a transparent canvas: colour and coverage both become
+      // count / N, so drawing it over any background is the exact average of the N sub-frames.
       const lg = laneCanvas.getContext("2d");
-      lg.globalCompositeOperation = "source-over"; lg.fillStyle = "#000"; lg.fillRect(0, 0, 684, 48);
-      lg.globalCompositeOperation = "lighter"; lg.fillStyle = `rgba(70,227,183,${1 / lane.n})`;
+      lg.globalCompositeOperation = "source-over"; lg.clearRect(0, 0, 684, 48);
+      lg.globalCompositeOperation = "lighter"; lg.fillStyle = rgba(C.accent, 1 / lane.n);
       for (let k = 0; k < lane.n; k++) {
         const tau = t - (k / lane.n) / FPS, x = 30 + ((tau * 1100) % 604);
         lg.beginPath(); lg.arc(x, 24, 15, 0, 7); lg.fill();
       }
-      g.globalCompositeOperation = "lighter"; g.drawImage(laneCanvas, 0, 0, 664, 48, 240, y, 664, 48); g.globalCompositeOperation = "source-over";
+      g.drawImage(laneCanvas, 0, 0, 664, 48, 240, y, 664, 48);
       g.globalAlpha = 1;
     });
   }
@@ -668,9 +716,9 @@
     for (let s = 0, k = 0; s <= DATA.duration + 1e-9; s += beat, k++) {
       const bar = k % 8 === 0, a = bar ? 0.4 * bars : 0.16 * beats;
       if (a <= 0) continue;
-      g.fillStyle = `rgba(122,150,220,${a})`; g.fillRect(CUE_X(s) - (bar ? 1 : 0.5), 18, bar ? 2 : 1, 200);
+      g.fillStyle = rgba(S.color.grid, a); g.fillRect(CUE_X(s) - (bar ? 1 : 0.5), 18, bar ? 2 : 1, 200);
     }
-    CUE_LANES.forEach((kind, li) => { g.fillStyle = "rgba(122,150,220,0.08)"; g.fillRect(200, 26 + 50 * li, 684, 34); });
+    CUE_LANES.forEach((kind, li) => { g.fillStyle = rgba(S.color.grid, 0.08); g.fillRect(200, 26 + 50 * li, 684, 34); });
     for (const hit of DATA.hits) {
       const at = cuesOn + 0.6 * (hit.t / DATA.duration), on = spring(t - at, 0.3, 0.6);
       if (on <= 0) continue;
@@ -686,7 +734,7 @@
       g.restore();
     }
     const head = CUE_X(t);
-    glow(g, head, 120, 60, C.mint, 0.35);
+    glow(g, head, 120, 60, C.accent, 0.35);
     g.fillStyle = C.ink; g.fillRect(head - 1.5, 12, 3, 214);
     well(g, 0, 290, 600, 310);
     const waveOn = smooth((t - cue("sound.wave")) / 0.35), align = cue("sound.align");
@@ -694,28 +742,28 @@
       const shift = -WHOOSH.peakS * WHOOSH.pxPerS * ease((t - (align - 0.4)) / 0.4);
       const x0 = WAVE_BEAT_X + shift, mid = 470, amp = 120 * waveOn;
       g.save(); roundRect(g, 0, 290, 600, 310, 12); g.clip();
-      g.fillStyle = rgba(C.violet, 0.9);
+      g.fillStyle = rgba(C.third, 0.9);
       WHOOSH.env.forEach(([lo, hi], c) => { const x = x0 + c; if (x > 4 && x < 596) g.fillRect(x, mid - hi * amp, 1, Math.max(1, (hi - lo) * amp)); });
       g.fillStyle = C.dim; g.fillRect(x0 - 1, 380, 2, 180);
-      g.fillStyle = C.coral; g.fillRect(x0 + WHOOSH.peakS * WHOOSH.pxPerS - 1.5, 380, 3, 180);
+      g.fillStyle = C.alert; g.fillRect(x0 + WHOOSH.peakS * WHOOSH.pxPerS - 1.5, 380, 3, 180);
       g.restore();
       const hitFlash = t >= align && t < align + 0.4 ? 1 - (t - align) / 0.4 : 0;
-      glow(g, WAVE_BEAT_X, mid, 70, C.amber, 0.7 * hitFlash);
-      g.fillStyle = C.amber; g.fillRect(WAVE_BEAT_X - 1.5, 372, 3, 196);
+      glow(g, WAVE_BEAT_X, mid, 70, C.fourth, 0.7 * hitFlash);
+      g.fillStyle = C.fourth; g.fillRect(WAVE_BEAT_X - 1.5, 372, 3, 196);
     }
     well(g, 624, 290, 280, 310);
     const meterOn = spring(t - cue("sound.meter"), 0.6, 0.55);
     const toX = (db) => 644 + 240 * clamp((db + 36) / 36);
-    g.fillStyle = "#16244A"; roundRect(g, 644, 420, 240, 36, 8); g.fill();
+    g.fillStyle = S.color.meter; roundRect(g, 644, 420, 240, 36, 8); g.fill();
     if (meterOn > 0 && DATA.target !== null) {
       const wobble = 0.8 * Math.sin(t * 7.3) + 0.5 * Math.sin(t * 13.1);
       const level = -36 + (DATA.target + 36) * meterOn + wobble * clamp(meterOn);
       const fill = g.createLinearGradient(644, 0, 884, 0);
-      fill.addColorStop(0, C.mint); fill.addColorStop(0.75, C.amber); fill.addColorStop(1, C.coral);
+      fill.addColorStop(0, C.accent); fill.addColorStop(0.75, C.fourth); fill.addColorStop(1, C.alert);
       g.fillStyle = fill; roundRect(g, 644, 420, Math.max(8, toX(level) - 644), 36, 8); g.fill();
     }
     if (DATA.target !== null) { g.fillStyle = C.ink; g.fillRect(toX(DATA.target) - 1.5, 408, 3, 60); }
-    if (DATA.ceiling !== null) { g.fillStyle = C.coral; g.fillRect(toX(DATA.ceiling) - 1.5, 408, 3, 60); }
+    if (DATA.ceiling !== null) { g.fillStyle = C.alert; g.fillRect(toX(DATA.ceiling) - 1.5, 408, 3, 60); }
   }
 
   const TRACE_N = 160, POP_AT = 52, HOLD_FROM = 98, HOLD_TO = 152;
@@ -732,19 +780,19 @@
     well(g, 0, 0, 904, 290);
     const scan = cue("check.scan"), seen = Math.floor(TRACE_N * clamp((t - scan) / 1.6));
     const fix = ease((t - cue("check.fixed")) / 0.5);
-    g.fillStyle = "rgba(122,150,220,0.25)"; g.fillRect(30, 262, 844, 2);
+    g.fillStyle = rgba(S.color.grid, 0.25); g.fillRect(30, 262, 844, 2);
     for (let i = 0; i < seen; i++) {
       const v = lerp(traceValue(i, false), traceValue(i, true), fix);
       const flagged = (i === POP_AT && t >= cue("check.pop")) || (i >= HOLD_FROM && i < HOLD_TO && t >= cue("check.hold"));
-      g.fillStyle = flagged ? (fix > 0.5 ? C.mint : C.coral) : "#8FA2D0";
+      g.fillStyle = flagged ? (fix > 0.5 ? C.accent : C.alert) : S.color.trace;
       g.fillRect(TRACE_X(i) - 1.6, TRACE_Y(v), 3.2, Math.max(2, 262 - TRACE_Y(v)));
     }
-    if (seen > 0 && seen < TRACE_N) { const x = TRACE_X(seen - 1); glow(g, x, 160, 80, C.blue, 0.35); g.fillStyle = C.ink; g.fillRect(x + 4, 56, 2, 210); }
+    if (seen > 0 && seen < TRACE_N) { const x = TRACE_X(seen - 1); glow(g, x, 160, 80, C.second, 0.35); g.fillStyle = C.ink; g.fillRect(x + 4, 56, 2, 210); }
     const pop = spring(t - cue("check.pop"), 0.35, 0.6);
-    if (pop > 0) { g.strokeStyle = fix > 0.5 ? C.mint : C.coral; g.lineWidth = 3; g.beginPath(); g.arc(TRACE_X(POP_AT), TRACE_Y(lerp(21, traceValue(POP_AT, true), fix)), 16 * pop, 0, 7); g.stroke(); }
+    if (pop > 0) { g.strokeStyle = fix > 0.5 ? C.accent : C.alert; g.lineWidth = 3; g.beginPath(); g.arc(TRACE_X(POP_AT), TRACE_Y(lerp(21, traceValue(POP_AT, true), fix)), 16 * pop, 0, 7); g.stroke(); }
     const hold = smooth((t - cue("check.hold")) / 0.3);
     if (hold > 0) {
-      g.globalAlpha = hold; g.strokeStyle = fix > 0.5 ? C.mint : C.coral; g.lineWidth = 3;
+      g.globalAlpha = hold; g.strokeStyle = fix > 0.5 ? C.accent : C.alert; g.lineWidth = 3;
       const a = TRACE_X(HOLD_FROM), b = TRACE_X(HOLD_TO - 1);
       g.beginPath(); g.moveTo(a, 232); g.lineTo(a, 222); g.lineTo(b, 222); g.lineTo(b, 232); g.stroke(); g.globalAlpha = 1;
     }
@@ -756,7 +804,7 @@
       g.beginPath(); g.arc(LOOP.x, LOOP.y, LOOP.r, 0, 7); g.stroke();
       [-90, 30, 150].forEach((deg, k) => {
         const a = deg * Math.PI / 180;
-        g.fillStyle = [C.blue, C.mint, C.coral][k]; g.beginPath(); g.arc(LOOP.x + LOOP.r * Math.cos(a), LOOP.y + LOOP.r * Math.sin(a), 10, 0, 7); g.fill();
+        g.fillStyle = [C.second, C.accent, C.alert][k]; g.beginPath(); g.arc(LOOP.x + LOOP.r * Math.cos(a), LOOP.y + LOOP.r * Math.sin(a), 10, 0, 7); g.fill();
       });
       const orbit = -Math.PI / 2 + (t - cue("check.arrive")) * Math.PI;
       const ox = LOOP.x + LOOP.r * Math.cos(orbit), oy = LOOP.y + LOOP.r * Math.sin(orbit);
@@ -801,7 +849,7 @@
     const markerFor = (c) => (c === 0 ? DATA.corpus.summary.median_gap_s : c === 1 ? DATA.corpus.summary.median_lufs : -1);
     const mk = lerp(CHART_X(CHARTS[stage.a], markerFor(stage.a)), CHART_X(CHARTS[stage.b], markerFor(stage.b)), stage.p);
     const markOn = smooth((t - cue("findings.gap")) / 0.3);
-    if (markOn > 0) { g.globalAlpha = markOn; g.fillStyle = stage.b === 2 && stage.p > 0.5 ? C.coral : C.ink; for (let y = 64; y < 366; y += 14) g.fillRect(mk - 1, y, 2, 8); g.globalAlpha = 1; }
+    if (markOn > 0) { g.globalAlpha = markOn; g.fillStyle = stage.b === 2 && stage.p > 0.5 ? C.alert : C.ink; for (let y = 64; y < 366; y += 14) g.fillRect(mk - 1, y, 2, 8); g.globalAlpha = 1; }
     const red = smooth((t - cue("findings.peakred")) / 0.3);
     DATA.corpus.files.forEach((f, i) => {
       const from = SWARM[stage.a][i], to = SWARM[stage.b][i];
@@ -819,7 +867,7 @@
       }
       const above = stage.b === 2 && f.peak_dbtp !== null && f.peak_dbtp > -1;
       g.globalAlpha = alpha;
-      g.fillStyle = above && red > 0 ? (red > 0.5 ? C.coral : C.amber) : stage.b === 0 && stage.p < 0.5 ? C.mint : C.blue;
+      g.fillStyle = above && red > 0 ? (red > 0.5 ? C.alert : C.fourth) : stage.b === 0 && stage.p < 0.5 ? C.accent : C.second;
       g.beginPath(); g.arc(x, y, 9, 0, 7); g.fill();
       g.globalAlpha = 1;
     });
@@ -836,15 +884,15 @@
         const [cx, cy] = project(cam, card.x, card.y, card.z + CARD.h);
         const beam = windowed(t, A.arrive[i], A.depart[i] + 0.3, 0.4, 0.4) * alpha;
         if (beam > 0) {
-          g.save(); g.globalCompositeOperation = "lighter";
+          g.save(); g.globalCompositeOperation = dark() ? "lighter" : "source-over"; g.globalAlpha = S.finish.beam;
           const grad = g.createLinearGradient(0, o.y + PANEL.h * o.k, 0, cy);
-          grad.addColorStop(0, rgba(C.mint, 0.0)); grad.addColorStop(0.5, rgba(C.mint, 0.07 * beam)); grad.addColorStop(1, rgba(C.mint, 0.2 * beam));
+          grad.addColorStop(0, rgba(C.accent, 0.0)); grad.addColorStop(0.5, rgba(C.accent, 0.07 * beam)); grad.addColorStop(1, rgba(C.accent, 0.2 * beam));
           g.fillStyle = grad;
           poly(g, [[o.x + 240 * o.k, o.y + PANEL.h * o.k], [o.x + 664 * o.k, o.y + PANEL.h * o.k], [cx + 60, cy], [cx - 60, cy]]); g.fill();
           for (let j = 0; j < 16; j++) {
             const p = (t * 0.55 + hash(j * 3 + 11)) % 1, side = hash(j * 5 + 2) - 0.5;
             const bx = lerp(cx + 100 * side, o.x + (452 + 400 * side) * o.k, p), by = lerp(cy, o.y + PANEL.h * o.k, p);
-            glow(g, bx, by, 9, C.mint, 0.5 * beam * Math.sin(Math.PI * p));
+            glow(g, bx, by, 9, C.accent, 0.5 * beam * Math.sin(Math.PI * p));
           }
           g.restore();
         }
@@ -869,8 +917,8 @@
       g.restore(); g.globalAlpha = 1;
       return;
     }
-    g.save(); g.globalAlpha = 0.55 * alpha; g.shadowColor = "rgba(0,0,0,0.9)"; g.shadowBlur = 48 * o.k; g.shadowOffsetY = 22 * o.k;
-    roundRect(g, o.x, o.y, spec.w * o.k, spec.h * o.k, 18 * o.k); g.fillStyle = "#050914"; g.fill(); g.restore();
+    g.save(); g.globalAlpha = S.finish.shadow * alpha; g.shadowColor = rgba(S.color.shadow, 0.9); g.shadowBlur = 48 * o.k; g.shadowOffsetY = 22 * o.k;
+    roundRect(g, o.x, o.y, spec.w * o.k, spec.h * o.k, 18 * o.k); g.fillStyle = S.color.scrim; g.fill(); g.restore();
     const pg = panelCanvas.getContext("2d");
     pg.setTransform(1, 0, 0, 1, 0, 0); pg.globalAlpha = 1; pg.globalCompositeOperation = "source-over";
     pg.clearRect(0, 0, PANEL.w, PANEL.h);
@@ -903,15 +951,16 @@
     for (const i of order) {
       const enter = easeOut((t - start - 0.06 * i) / 0.5);
       if (enter <= 0) continue;
-      const pop = focus && focus.i === i ? 1 + 0.1 * spring(focus.since, 0.3, 0.7) : 1;
+      // The review cursor jumps (no tween), so each step is one clear change in any style.
+      const pop = focus && focus.i === i ? 1.14 : 1;
       const [cx, cy] = sheetCell(i), w = SHEET.w * pop, h = SHEET.h * pop;
       const x = cx + 260 * (1 - enter) - (w - SHEET.w) / 2, y = cy - (h - SHEET.h) / 2;
       g.globalAlpha = enter;
       g.drawImage(miniature(sheetFrame(i), SHEET.w, SHEET.h), x, y, w, h);
-      g.fillStyle = "rgba(5,9,20,0.82)"; g.fillRect(x, y + h - 30, w, 30);
+      g.fillStyle = rgba(S.color.scrim, 0.82); g.fillRect(x, y + h - 30, w, 30);
       if (pop > 1) {
-        g.lineWidth = 4; g.strokeStyle = C.mint; roundRect(g, x - 3, y - 3, w + 6, h + 6, 8); g.stroke();
-        glow(g, x + w / 2, y + h / 2, 160, C.mint, 0.22 * focus.on);
+        g.lineWidth = 4; g.strokeStyle = C.accent; roundRect(g, x - 3, y - 3, w + 6, h + 6, 8); g.stroke();
+        glow(g, x + w / 2, y + h / 2, 160, C.accent, 0.22 * focus.on);
       }
       g.globalAlpha = 1;
     }
@@ -922,7 +971,7 @@
     const card = cardState(t);
     const slots = (0.6 + 0.4 * smooth(t / 0.3)) * (1 - smooth((t - cue("open.sort")) / 0.4));
     if (slots > 0) {
-      g.fillStyle = `rgba(122,150,220,${(0.16 * slots).toFixed(3)})`;
+      g.fillStyle = rgba(S.color.grid, (0.16 * slots).toFixed(3));
       g.beginPath();
       for (const tile of TILES.tiles) {
         if (t >= tile.rise + 0.1) continue;
@@ -950,7 +999,7 @@
       const [px, py] = project(cam, STATION_X[i], 0, 0), r = 14 * cam.zoom;
       g.save(); g.translate(px, py); g.scale(1, cam.sp);
       const pool = g.createRadialGradient(0, 0, 0, 0, 0, r);
-      pool.addColorStop(0, rgba(C.mint, state === 2 ? 0.16 : 0.06)); pool.addColorStop(1, rgba(C.mint, 0));
+      pool.addColorStop(0, rgba(C.accent, state === 2 ? 0.16 : 0.06)); pool.addColorStop(1, rgba(C.accent, 0));
       g.fillStyle = pool; g.fillRect(-r, -r, 2 * r, 2 * r); g.restore();
     }
     for (let i = 0; i < 5; i++) list.push(...gate(g, cam, i, t));
@@ -960,7 +1009,7 @@
     for (let i = 0; i < 5; i++) {
       const state = stationState(i, t), [lx, ly] = project(cam, STATION_X[i], 0, 5.1);
       const lit = state === 2 ? 0.9 : state === 1 ? 0.35 : 0.15;
-      glow(g, lx, ly, 46 * cam.zoom / STATION_ZOOM + 10, state === 0 ? C.blue : C.mint, lit);
+      glow(g, lx, ly, 46 * cam.zoom / STATION_ZOOM + 10, state === 0 ? C.second : C.accent, lit);
     }
     return card;
   }
@@ -971,13 +1020,13 @@
     const x0 = 96, x1 = 1824, y = 1004;
     const progress = railProgress(t);
     g.globalAlpha = on;
-    g.fillStyle = "rgba(122,150,220,0.28)"; g.fillRect(x0, y - 1, x1 - x0, 2);
-    g.fillStyle = C.mint; g.fillRect(x0, y - 2, (x1 - x0) * progress, 4);
+    g.fillStyle = rgba(S.color.grid, 0.28); g.fillRect(x0, y - 1, x1 - x0, 2);
+    g.fillStyle = C.accent; g.fillRect(x0, y - 2, (x1 - x0) * progress, 4);
     for (let i = 0; i < 5; i++) {
       const x = lerp(x0, x1, i / 4), done = progress >= i / 4 - 1e-6;
-      g.fillStyle = done ? C.mint : "#33456F"; g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill();
+      g.fillStyle = done ? C.accent : S.color.off; g.beginPath(); g.arc(x, y, 7, 0, 7); g.fill();
     }
-    glow(g, x0 + (x1 - x0) * progress, y, 30, C.mint, 0.6);
+    glow(g, x0 + (x1 - x0) * progress, y, 30, C.accent, 0.6);
     g.globalAlpha = 1;
   }
   function railProgress(t) {
@@ -990,20 +1039,20 @@
     const a = smooth((t - (A.fin - 0.2)) / 0.8);
     if (a <= 0) return;
     const grad = g.createLinearGradient(0, 0, 1200, 0);
-    grad.addColorStop(0, `rgba(5,9,20,${0.9 * a})`); grad.addColorStop(0.65, `rgba(5,9,20,${0.55 * a})`); grad.addColorStop(1, "rgba(5,9,20,0)");
-    g.fillStyle = `rgba(5,9,20,${(0.4 * a).toFixed(3)})`; g.fillRect(0, 0, W, H);
+    grad.addColorStop(0, rgba(S.color.scrim, 0.9 * a)); grad.addColorStop(0.65, rgba(S.color.scrim, 0.55 * a)); grad.addColorStop(1, rgba(S.color.scrim, 0));
+    g.fillStyle = rgba(S.color.scrim, (0.4 * a).toFixed(3)); g.fillRect(0, 0, W, H);
     g.fillStyle = grad; g.fillRect(0, 0, 1200, H);
   }
   function floorScrim(g, t) {
     const on = windowed(t, A.arrive[0] - 0.4, A.depart[4] + 0.2, 0.4, 0.4);
     if (on <= 0) return;
     const grad = g.createLinearGradient(0, 900, 0, H);
-    grad.addColorStop(0, "rgba(5,9,20,0)"); grad.addColorStop(0.45, `rgba(5,9,20,${0.7 * on})`); grad.addColorStop(1, `rgba(5,9,20,${0.85 * on})`);
+    grad.addColorStop(0, rgba(S.color.scrim, 0)); grad.addColorStop(0.45, rgba(S.color.scrim, 0.7 * on)); grad.addColorStop(1, rgba(S.color.scrim, 0.85 * on));
     g.fillStyle = grad; g.fillRect(0, 900, W, H - 900);
   }
   function vignette(g) {
     const grad = g.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, H * 1.05);
-    grad.addColorStop(0, "rgba(0,0,0,0)"); grad.addColorStop(1, "rgba(0,0,0,0.45)");
+    grad.addColorStop(0, rgba(S.color.vignette, 0)); grad.addColorStop(1, rgba(S.color.vignette, S.finish.vignette));
     g.fillStyle = grad; g.fillRect(0, 0, W, H);
   }
   // Grey bars stand in for DOM text inside miniatures (the DOM is not part of the canvas).
@@ -1012,12 +1061,12 @@
       const a = blockOpacity(block, t);
       if (a <= 0) continue;
       g.globalAlpha = a;
-      g.fillStyle = C.mint; g.fillRect(96, 150, 300, 22);
-      g.fillStyle = "#C9D3EC"; g.fillRect(96, 200, 700, 56); g.fillRect(96, 270, 480, 56);
-      g.fillStyle = "#5D6C95"; for (let r = 0; r < 3; r++) g.fillRect(96, 360 + 44 * r, r === 2 ? 420 : 700, 22);
+      g.fillStyle = C.accent; g.fillRect(96, 150, 300, 22);
+      g.fillStyle = S.color.ghost[0]; g.fillRect(96, 200, 700, 56); g.fillRect(96, 270, 480, 56);
+      g.fillStyle = S.color.ghost[1]; for (let r = 0; r < 3; r++) g.fillRect(96, 360 + 44 * r, r === 2 ? 420 : 700, 22);
       g.globalAlpha = 1;
     }
-    g.fillStyle = "#5D6C95"; g.fillRect(96, 64, 330, 22); g.fillRect(1444, 64, 380, 22);
+    g.fillStyle = S.color.ghost[1]; g.fillRect(96, 64, 330, 22); g.fillRect(1444, 64, 380, 22);
   }
 
   function drawWorld(g, t, cam, mini) {
@@ -1034,6 +1083,13 @@
     if (!mini) bloom(g);
     vignette(g);
     if (!mini) grain(g);
+    if (!mini) scanlines(g);
+  }
+  function scanlines(g) {
+    if (S.finish.scanlines <= 0) return;
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = rgba(S.color.scrim, S.finish.scanlines);
+    for (let y = 0; y < H; y += 3) g.fillRect(0, y, W, 1);
+    g.restore();
   }
 
   // Finishing, so flat vector art reads as lit: bright parts bleed light (threshold by contrast, blur at
@@ -1042,14 +1098,16 @@
   const bloomSmall = document.createElement("canvas"), bloomBlur = document.createElement("canvas");
   bloomSmall.width = bloomBlur.width = 480; bloomSmall.height = bloomBlur.height = 270;
   function bloom(g) {
+    if (!dark() || S.finish.bloom <= 0) return;
     const a = bloomSmall.getContext("2d"), b = bloomBlur.getContext("2d");
     a.globalCompositeOperation = "copy"; a.drawImage(g.canvas, 0, 0, 480, 270);
     b.globalCompositeOperation = "copy"; b.filter = "brightness(1.05) contrast(2.4) blur(7px)"; b.drawImage(bloomSmall, 0, 0); b.filter = "none";
-    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = "lighter"; g.globalAlpha = 0.3;
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = "lighter"; g.globalAlpha = S.finish.bloom;
     g.drawImage(bloomBlur, 0, 0, W, H); g.restore();
   }
   let GRAIN = null;
   function grain(g) {
+    if (S.finish.grain <= 0) return;
     if (!GRAIN) {
       const c = document.createElement("canvas"); c.width = c.height = 256;
       const x = c.getContext("2d"), img = x.createImageData(256, 256);
@@ -1057,7 +1115,7 @@
       x.putImageData(img, 0, 0);
       GRAIN = c;
     }
-    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = "overlay"; g.globalAlpha = 0.05;
+    g.save(); g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = "overlay"; g.globalAlpha = S.finish.grain;
     g.fillStyle = g.createPattern(GRAIN, "repeat"); g.fillRect(0, 0, W, H); g.restore();
   }
 
@@ -1120,9 +1178,9 @@
       { kicker: `06 · WHAT ${s.measured_files} FILES SHOW`, headline: "A new visual idea every 1.8 seconds.", wrap: 600,
         desc: "Medians, measured with this harness on the published files.", from: A.find + 0.15, to: A.findDepart,
         stats: [
-          { num: `${s.median_gap_s.toFixed(2)} s`, what: "median gap between visual events", color: C.mint, at: cue("findings.gap") },
-          { num: `${minus(s.median_lufs.toFixed(1))} LUFS`, what: `median loudness of the ${s.audible_files} audible files`, color: C.blue, at: cue("findings.loudmed") },
-          { num: `${s.peak_above_minus1} of ${s.audible_files}`, what: "peak above −1 dBTP after X’s re-encode", color: C.coral, at: cue("findings.peakred") },
+          { num: `${s.median_gap_s.toFixed(2)} s`, what: "median gap between visual events", color: C.accent, at: cue("findings.gap") },
+          { num: `${minus(s.median_lufs.toFixed(1))} LUFS`, what: `median loudness of the ${s.audible_files} audible files`, color: C.second, at: cue("findings.loudmed") },
+          { num: `${s.peak_above_minus1} of ${s.audible_files}`, what: "peak above −1 dBTP after X’s re-encode", color: C.alert, at: cue("findings.peakred") },
         ] },
       { finale: ["Written as code.", "Measured as video."], from: cue("finale.title1") - 0.05, to: Infinity },
     ];
@@ -1139,7 +1197,7 @@
       } else {
         block.kick = el(root, "kicker", spec.kicker);
         const h = el(root, "headline", undefined, `headline-${i}`);
-        if (spec.wrap) h.style.width = `${spec.wrap}px`;
+        if (spec.wrap) h.style.width = `${Math.min(800, Math.round(spec.wrap * S.type.wrapScale))}px`;
         block.words = words(h, spec.headline);
         block.desc = el(root, "desc", spec.desc, `desc-${i}`);
         if (spec.note) block.note = el(root, "note", spec.note, `note-${i}`);
@@ -1180,6 +1238,8 @@
     const items = specs.map((s) => {
       const e = el(dom, `abs ${s.cls || "label"}`, s.text, s.id);
       if (s.color) e.style.color = s.color;
+      // Style packs change font metrics; a long label gets a width it may wrap within instead of overflowing.
+      if (s.wrap) { e.style.maxWidth = `${s.wrap}px`; e.style.whiteSpace = "normal"; }
       return { ...s, e };
     });
     updaters.push((t, cam) => {
@@ -1218,10 +1278,11 @@
     }
     for (const chip of CHIPS) {
       specs.push({ id: `chip.${chip.req.id}`, cls: "abs chip", text: chip.req.id, x: BIN_X[chip.req.kind] + 10, y: 104 + 34 * chip.slot + 1,
+                   color: onFill(KIND_COLOR[chip.req.kind]),
                    show: (t) => smooth((t - (chip.start + 0.4)) / 0.12) });
     }
     specs.push({ id: "brief.total", cls: "label sans", text: `${DATA.reqs.length} requirements, frozen before the render`,
-                 x: 440, y: 516, color: C.soft, show: (t) => smooth((t - cue("brief.binned")) / 0.3) });
+                 x: 440, y: 516, color: C.soft, wrap: 450, show: (t) => smooth((t - cue("brief.binned")) / 0.3) });
     panelLabels(0, specs);
   }
 
@@ -1234,11 +1295,11 @@
       specs.push({ id: `code.line${i}`, cls: "abs code", text: line.text || " ", x: 92, y: 62 + 36 * i, show: (t) => smooth((t - at) / 0.15) });
     });
     const plotOn = (t) => smooth((t - cue("code.type3") - 0.25) / 0.3);
-    specs.push({ id: "code.spring", cls: "label sans", text: "springs: one step response per target", x: 20, y: 326, color: C.soft, show: plotOn });
+    specs.push({ id: "code.spring", cls: "label sans", text: "springs: one step response per target", x: 20, y: 326, color: C.soft, wrap: 540, show: plotOn });
     specs.push({ id: "code.seek", text: "", x: 604, y: 184, color: C.ink,
                  text$: (t) => { const s = codeScrub(t); return `seek(${pad(s.ts.toFixed(2), 5)})`; } });
     const modeText = { live: ["live", "t = now"], forward: ["forward", "0 → 48 s"], reverse: ["reverse", "48 → 20 s"], shuffled: ["shuffled", "random order"] };
-    const modeColor = { live: C.soft, forward: C.mint, reverse: C.blue, shuffled: C.amber };
+    const modeColor = { live: C.soft, forward: C.accent, reverse: C.second, shuffled: C.fourth };
     specs.push({ id: "code.mode", text: "", x: 604, y: 232, cls: "label strong", text$: (t) => modeText[codeScrub(t).mode][0], color$: (t) => modeColor[codeScrub(t).mode] });
     specs.push({ id: "code.mode.sub", cls: "label sans", text: "", x: 604, y: 268, color: C.soft, text$: (t) => modeText[codeScrub(t).mode][1] });
     specs.push({ id: "code.match", cls: "label sans strong", text: "Same t, same frame,", x: 604, y: 340, color: C.ink, show: (t) => smooth((t - cue("code.match")) / 0.3) });
@@ -1252,13 +1313,13 @@
     const specs = [{ id: "cap.url", text: "127.0.0.1 / index.html", x: 24, y: 10, color: C.dim }];
     specs.push({ id: "cap.frame", text: "", x: 20, y: 352, color: C.ink, cls: "label strong",
                  text$: (t) => `captured ${pad(Math.max(1, captureState(t).frame), 4)} / ${fmt(DATA.frames)}`, show: (t) => smooth((t - cue("capture.start")) / 0.2) });
-    specs.push({ id: "cap.rate", text: "", x: 440, y: 352, color: C.amber, cls: "label strong",
+    specs.push({ id: "cap.rate", text: "", x: 440, y: 352, color: C.fourth, cls: "label strong",
                  text$: (t) => `×${captureState(t).rate}`, show: (t) => smooth((t - cue("capture.x4")) / 0.2) });
     specs.push({ id: "cap.mp4", cls: "label strong", text: "video.mp4", x: 730, y: 128, align: "c", color: C.ink, show: (t) => smooth((t - cue("capture.encode") - 0.3) / 0.3) });
     specs.push({ id: "cap.codec", cls: "label sans", text: "H.264 · 30 fps", x: 730, y: 170, align: "c", color: C.soft, show: (t) => smooth((t - cue("capture.encode") - 0.4) / 0.3) });
     LANES.forEach((lane, li) => specs.push({ id: `cap.lane${li}`, text: lane.n === 1 ? "1 sample" : `${lane.n} sub-frames`, x: 20, y: 406 + 58 * li,
                                              color: C.ink, show: (t) => smooth((t - cue(lane.cueName)) / 0.25) }));
-    specs.push({ id: "cap.blur", cls: "label sans", text: "averaged within one frame = motion blur", x: 240, y: 566, color: C.soft,
+    specs.push({ id: "cap.blur", cls: "label sans", text: "averaged within one frame = motion blur", x: 240, y: 566, color: C.soft, wrap: 650,
                  show: (t) => smooth((t - cue("capture.lane3") - 0.2) / 0.3) });
     panelLabels(2, specs);
   }
@@ -1275,16 +1336,16 @@
     specs.push({ id: "snd.how", cls: "label sans", text: "", x: 180, y: 304, color: C.ink,
                  text$: (t) => (t < cue("sound.align") - 0.2 ? `by its start: peak lands ${ms} ms late` : "by its peak: it lands on the beat"),
                  show: (t) => smooth((t - cue("sound.wave")) / 0.3) });
-    specs.push({ id: "snd.beat", text: "beat", x: WAVE_BEAT_X, y: 344, align: "c", color: C.amber, show: (t) => smooth((t - cue("sound.wave")) / 0.3) });
+    specs.push({ id: "snd.beat", text: "beat", x: WAVE_BEAT_X, y: 344, align: "c", color: C.fourth, show: (t) => smooth((t - cue("sound.wave")) / 0.3) });
     const shiftX = (t) => -WHOOSH.peakS * WHOOSH.pxPerS * ease((t - (cue("sound.align") - 0.4)) / 0.4);
     specs.push({ id: "snd.start", text: "start", x: 0, y: 564, align: "c", color: C.soft, show: (t) => smooth((t - cue("sound.wave")) / 0.3) * (1 - smooth((t - cue("sound.align") + 0.5) / 0.2)),
                  at$: (t) => [WAVE_BEAT_X + shiftX(t), 564] });
-    specs.push({ id: "snd.peak", text: `peak +${ms} ms`, x: 0, y: 564, align: "c", color: C.coral, show: (t) => smooth((t - cue("sound.wave")) / 0.3),
+    specs.push({ id: "snd.peak", text: `peak +${ms} ms`, x: 0, y: 564, align: "c", color: C.alert, show: (t) => smooth((t - cue("sound.wave")) / 0.3),
                  at$: (t) => [WAVE_BEAT_X + shiftX(t) + WHOOSH.peakS * WHOOSH.pxPerS, 564] });
     specs.push({ id: "snd.meter", text: "loudness", x: 644, y: 304, color: C.dim, show: (t) => smooth((t - cue("sound.meter") + 0.3) / 0.3) });
     if (DATA.target !== null) specs.push({ id: "snd.target", text: `target ${minus(DATA.target)} LUFS`, x: 884, y: 364, align: "r", color: C.ink,
                                            show: (t) => smooth((t - cue("sound.target")) / 0.3) });
-    if (DATA.ceiling !== null) specs.push({ id: "snd.ceiling", text: `peak ≤ ${minus(DATA.ceiling)} dBTP`, x: 884, y: 480, align: "r", color: C.coral,
+    if (DATA.ceiling !== null) specs.push({ id: "snd.ceiling", text: `peak ≤ ${minus(DATA.ceiling)} dBTP`, x: 884, y: 480, align: "r", color: C.alert,
                                             show: (t) => smooth((t - cue("sound.target") - 0.15) / 0.3) });
     specs.push({ id: "snd.after", cls: "label sans", text: "after AAC encode", x: 644, y: 540, color: C.soft, show: (t) => smooth((t - cue("sound.target") - 0.3) / 0.3) });
     panelLabels(3, specs);
@@ -1295,12 +1356,12 @@
   const OPS = { eq: "=", le: "≤", ge: "≥" };
   function checkLabels() {
     const specs = [{ id: "chk.title", text: "frame-to-frame change · example trace", x: 20, y: 12, color: C.dim }];
-    specs.push({ id: "chk.pop", text: "", x: TRACE_X(POP_AT) + 22, y: 50, color: C.coral, cls: "label strong",
-                 text$: (t) => (t < cue("check.fixed") + 0.25 ? "one-frame pop" : "pop removed"), color$: (t) => (t < cue("check.fixed") + 0.25 ? C.coral : C.mint),
+    specs.push({ id: "chk.pop", text: "", x: TRACE_X(POP_AT) + 22, y: 50, color: C.alert, cls: "label strong",
+                 text$: (t) => (t < cue("check.fixed") + 0.25 ? "one-frame pop" : "pop removed"), color$: (t) => (t < cue("check.fixed") + 0.25 ? C.alert : C.accent),
                  show: (t) => smooth((t - cue("check.pop")) / 0.25) });
-    specs.push({ id: "chk.hold", text: "", x: (TRACE_X(HOLD_FROM) + TRACE_X(HOLD_TO - 1)) / 2, y: 182, align: "c", color: C.coral, cls: "label strong",
+    specs.push({ id: "chk.hold", text: "", x: (TRACE_X(HOLD_FROM) + TRACE_X(HOLD_TO - 1)) / 2, y: 182, align: "c", color: C.alert, cls: "label strong",
                  text$: (t) => (t < cue("check.fixed") + 0.25 ? `still for ${((HOLD_TO - HOLD_FROM) / FPS).toFixed(1)} s` : "motion added"),
-                 color$: (t) => (t < cue("check.fixed") + 0.25 ? C.coral : C.mint), show: (t) => smooth((t - cue("check.hold")) / 0.25) });
+                 color$: (t) => (t < cue("check.fixed") + 0.25 ? C.alert : C.accent), show: (t) => smooth((t - cue("check.hold")) / 0.25) });
     specs.push({ id: "chk.rules", cls: "label sans", text: `this film’s rules (8 of ${DATA.reqs.length})`, x: 20, y: 332, color: C.dim,
                  show: (t) => smooth((t - cue("check.row1") + 0.2) / 0.3) });
     const picks = ["SEEK", "TRUE-PEAK", "HITS", "OVERLAP", "DEAD-TIME", "POPS", "CONTRAST", "CRAFT"];
@@ -1313,9 +1374,9 @@
       specs.push({ id: `chk.rule${k}`, text: rule, x: x + 14.4 * (r.id.length + 1), y, color: C.soft, show: (t) => smooth((t - at) / 0.2) });
     });
     const loopOn = (t) => smooth((t - (cue("check.arrive") + 0.5)) / 0.4);
-    specs.push({ id: "loop.render", text: "render", x: LOOP.x, y: LOOP.y - LOOP.r - 44, align: "c", color: C.blue, show: loopOn });
-    specs.push({ id: "loop.measure", text: "measure", x: LOOP.x + 74, y: LOOP.y + 56, align: "c", color: C.mint, show: loopOn });
-    specs.push({ id: "loop.repair", text: "repair", x: LOOP.x - 74, y: LOOP.y + 56, align: "c", color: C.coral, show: loopOn });
+    specs.push({ id: "loop.render", text: "render", x: LOOP.x, y: LOOP.y - LOOP.r - 44, align: "c", color: C.second, show: loopOn });
+    specs.push({ id: "loop.measure", text: "measure", x: LOOP.x + 74, y: LOOP.y + 56, align: "c", color: C.accent, show: loopOn });
+    specs.push({ id: "loop.repair", text: "repair", x: LOOP.x - 74, y: LOOP.y + 56, align: "c", color: C.alert, show: loopOn });
     specs.push({ id: "loop.rounds", cls: "label strong", text: "≤ 3 rounds", x: LOOP.x, y: LOOP.y - 14, align: "c", color: C.ink, show: loopOn });
     panelLabels(4, specs);
   }
@@ -1335,7 +1396,7 @@
     const medians = [`median ${s.median_gap_s.toFixed(2)} s`, `median ${minus(s.median_lufs.toFixed(1))} LUFS`, `${s.peak_above_minus1} of ${s.audible_files} above −1`];
     const markerX = [CHART_X(CHARTS[0], s.median_gap_s), CHART_X(CHARTS[1], s.median_lufs), CHART_X(CHARTS[2], -1)];
     const cues = ["findings.gap", "findings.loudmed", "findings.peakred"];
-    medians.forEach((m, k) => specs.push({ id: `fnd.med${k}`, cls: "label strong", text: m, x: markerX[k] + 12, y: 52, color: k === 2 ? C.coral : C.ink,
+    medians.forEach((m, k) => specs.push({ id: `fnd.med${k}`, cls: "label strong", text: m, x: markerX[k] + 12, y: 52, color: k === 2 ? C.alert : C.ink,
                                           show: (t) => clamp(stageOn(k)(t) * 2 - 1) * smooth((t - cue(cues[k])) / 0.3) }));
     const silent = s.measured_files - s.audible_files;
     specs.push({ id: "fnd.silent", cls: "label sans", text: `${silent} silent files left out`, x: 884, y: 420, align: "r", color: C.dim,
@@ -1371,7 +1432,7 @@
     const rows = [[`1 HTML file`, `${fmt(DATA.sourceLines)} lines`, `${DATA.reqs.length} requirements`],
                   [`${DATA.hits.length} cues`, `${fmt(DATA.frames)} frames`, `${DATA.duration} s at ${DATA.contract.video.fps} fps`]];
     const label = el(dom, "abs label", "this film:", "finale.this");
-    label.style.color = C.mint;
+    label.style.color = C.accent;
     let k = 0;
     const parts = rows.map((items, r) => {
       const row = el(dom, "abs label", "", `finale.stats${r}`);
@@ -1428,7 +1489,7 @@
       const on = windowed(t, A.arrive[0] - 0.4, A.depart[4] + 0.2, 0.4, 0.4), progress = railProgress(t);
       names.forEach((e, i) => {
         const x = lerp(96, 1824, i / 4);
-        e.style.color = Math.abs(progress - i / 4) < 0.02 ? C.ink : progress > i / 4 ? C.mint : C.dim;
+        e.style.color = Math.abs(progress - i / 4) < 0.02 ? C.ink : progress > i / 4 ? C.accent : C.dim;
         place(e, x, 958, i === 0 ? "l" : i === 4 ? "r" : "c", on);
       });
     });
@@ -1473,6 +1534,7 @@
       fetch(contractUrl).then((r) => r.json()), fetch(location.pathname).then((r) => r.text()), fetch("corpus.json").then((r) => r.json()),
     ]);
     DATA = derive(contract, source, corpus);
+    applyStyle(contract.style);
     build();
   }
 

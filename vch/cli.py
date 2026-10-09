@@ -1,12 +1,13 @@
 from __future__ import annotations
 import argparse
 import json
+import os
 from pathlib import Path
-from .core import load_contract, SceneRenderer, source_manifest
+from .core import load_contract, resolve_style, SceneRenderer, source_manifest
 from .pipeline import render, audit
 from .evaluate import evaluate, review_template, METRIC_TYPES
 from .backends import create_renderer
-from .tools import still_times, render_stills, storyboard_markdown, profile_media, summary_line, compare_profiles
+from .tools import still_times, render_stills, storyboard_markdown, profile_media, summary_line, compare_profiles, diversity_markdown
 
 
 def main():
@@ -16,11 +17,15 @@ def main():
         p=sub.add_parser(name); p.add_argument('contract')
     p=sub.add_parser('metrics')
     p=sub.add_parser('run'); p.add_argument('contract'); p.add_argument('--out',required=True);p.add_argument('--trust-scene-code',action='store_true')
+    p.add_argument('--style',help='Style pack (.json inside the project) replacing contract.style; recorded in the run')
     p=sub.add_parser('still');p.add_argument('contract');p.add_argument('--time',type=float,required=True);p.add_argument('--out',required=True);p.add_argument('--trust-scene-code',action='store_true')
+    p.add_argument('--style')
     p=sub.add_parser('stills',help='Render preview stills + sheet before a full render')
     p.add_argument('contract');p.add_argument('--out',required=True);p.add_argument('--times',help='Comma-separated seconds')
     p.add_argument('--beats',action='store_true',help='One still per beat of timing.bpm');p.add_argument('--trust-scene-code',action='store_true')
     p.add_argument('--motion',action='store_true',help='Also report each still\'s change to the next frame (dead-time proxy)')
+    p.add_argument('--style',help='Style pack (.json inside the project) replacing contract.style')
+    p=sub.add_parser('diversity',help='Style descriptors and pairwise style distance of videos or run folders');p.add_argument('media',nargs='+')
     p=sub.add_parser('storyboard',help='Print a timestamped storyboard table from a contract');p.add_argument('contract')
     p=sub.add_parser('profile',help='Measure pacing/sound of a video or audio file (reference or candidate)')
     p.add_argument('media');p.add_argument('--out',required=True);p.add_argument('--every',type=float,default=1.0);p.add_argument('--max-fps',type=float,default=30.0)
@@ -53,8 +58,12 @@ def main():
             print(compare_profiles(first,second),end='');return
         if args.cmd=='profile':
             print(json.dumps(summary_line(profile_media(Path(args.media),Path(args.out),every=args.every,max_fps=args.max_fps)),ensure_ascii=False,indent=2));return
+        if args.cmd=='diversity':
+            print(diversity_markdown(args.media),end='');return
         if args.cmd in ('validate','packet','run','still','stills','storyboard'):
             spec,root=load_contract(args.contract)
+            if getattr(args,'style',None):
+                spec['style']=resolve_style(os.path.relpath(Path(args.style).resolve(),root),root)
         if args.cmd=='validate':
             print('Contract structurally valid; unknown metrics remain unmeasured at evaluation.');return
         if args.cmd=='packet':

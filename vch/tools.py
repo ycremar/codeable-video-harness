@@ -27,6 +27,8 @@ PROFILE_SHEET_COLS = 6
 TIMELINE_SIZE = (1600, 260)
 VISUAL_SYNC_WINDOW_S = 0.1
 CUT_SYNC_WINDOW_S = 0.05
+# Pairwise style_distance among the 511 awesome-opus5-5-videos posters measured on 2026-10-08.
+CORPUS_STYLE_DISTANCE = {"p10": 0.82, "median": 1.34, "p90": 2.02}
 COMPARE_ROWS = (
     ("duration (s)", ("video", "duration_s")),
     ("hard cuts per 10 s", ("video", "cuts_per_10s")),
@@ -278,6 +280,38 @@ def summary_line(profile: dict[str, Any]) -> dict[str, Any]:
         "integrated_lufs": a.get("integrated_lufs"), "true_peak_dbtp": a.get("true_peak_dbtp"),
         "tempo": a.get("tempo"), "onsets": len(a.get("onsets", [])) if a else None,
     }.items() if x is not None and not (isinstance(x, float) and math.isnan(x))}
+
+
+def _media_path(item: str | Path) -> Path:
+    path = Path(item)
+    return path / "video.mp4" if path.is_dir() else path
+
+
+def style_profile(item: str | Path) -> dict[str, Any]:
+    """Decoded style descriptors of a video file or a run folder (its video.mp4)."""
+    path = _media_path(item)
+    stream = signals.probe_video(path)
+    return {"input": str(item), **signals.decoded_style(path, width=stream["width"], height=stream["height"])}
+
+
+def diversity_markdown(items: list[str | Path]) -> str:
+    """Style descriptors per video and their pairwise style distances (a spread measure, not taste)."""
+    if len(items) < 2:
+        raise ValueError("Diversity needs at least two videos")
+    styles = [style_profile(item) for item in items]
+    names = [Path(str(s["input"])).name or str(s["input"]) for s in styles]
+    lines = ["| video | luma | vivid share | dominant hue | colourfulness | palette | edge density |", "|---|---|---|---|---|---|---|"]
+    for name, st in zip(names, styles):
+        lines.append(f"| {name} | {st['luma']:.3f} | {st['vivid_share']:.3f} | {st['dominant_hue']} | {st['colourfulness']:.1f} | "
+                     f"{st['palette']:.0f} | {st['edge_density']:.3f} |")
+    lines += ["", "| style distance | " + " | ".join(names) + " |", "|---" * (len(names) + 1) + "|"]
+    for name, a in zip(names, styles):
+        lines.append(f"| {name} | " + " | ".join(f"{signals.style_distance(a, b):.2f}" for b in styles) + " |")
+    lines += ["", "Distances combine brightness, vividness, colourfulness, detail and palette size (each scaled by its "
+              "p10-p90 spread across 511 corpus posters) with the hue distribution. 0 = same descriptors. Two random "
+              f"corpus posters are {CORPUS_STYLE_DISTANCE['median']} apart at the median ({CORPUS_STYLE_DISTANCE['p10']} "
+              f"at p10). This measures spread, not quality or taste."]
+    return "\n".join(lines) + "\n"
 
 
 def _lookup(profile: dict[str, Any], keys: tuple[str, ...]) -> Any:

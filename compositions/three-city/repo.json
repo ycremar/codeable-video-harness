@@ -1,0 +1,450 @@
+{
+ "snapshot": "2026-10-08",
+ "source": "git ls-files of this repository; lines = newline count; vendored libraries excluded",
+ "files": [
+  {
+   "path": ".claude/skills/codeable-video/SKILL.md",
+   "lines": 62,
+   "kind": "docs",
+   "district": ".claude"
+  },
+  {
+   "path": ".github/workflows/browser.yml",
+   "lines": 24,
+   "kind": "config",
+   "district": ".github"
+  },
+  {
+   "path": ".github/workflows/test.yml",
+   "lines": 17,
+   "kind": "config",
+   "district": ".github"
+  },
+  {
+   "path": "AGENTS.md",
+   "lines": 29,
+   "kind": "docs",
+   "district": "root"
+  },
+  {
+   "path": "CLAUDE.md",
+   "lines": 4,
+   "kind": "docs",
+   "district": "root"
+  },
+  {
+   "path": "README.md",
+   "lines": 278,
+   "kind": "docs",
+   "district": "root"
+  },
+  {
+   "path": "adapters/model_api.py",
+   "lines": 101,
+   "kind": "python",
+   "district": "adapters"
+  },
+  {
+   "path": "adapters/planned_author.py",
+   "lines": 21,
+   "kind": "python",
+   "district": "adapters"
+  },
+  {
+   "path": "assets/fonts/Inter-OFL.txt",
+   "lines": 93,
+   "kind": "docs",
+   "district": "assets"
+  },
+  {
+   "path": "assets/fonts/JetBrainsMono-OFL.txt",
+   "lines": 93,
+   "kind": "docs",
+   "district": "assets"
+  },
+  {
+   "path": "assets/fonts/NotoSerifSC-OFL.txt",
+   "lines": 94,
+   "kind": "docs",
+   "district": "assets"
+  },
+  {
+   "path": "backends/pdoom/PROVENANCE.md",
+   "lines": 12,
+   "kind": "docs",
+   "district": "backends"
+  },
+  {
+   "path": "backends/pdoom/index.html",
+   "lines": 1,
+   "kind": "html",
+   "district": "backends"
+  },
+  {
+   "path": "backends/pdoom/package.json",
+   "lines": 12,
+   "kind": "data",
+   "district": "backends"
+  },
+  {
+   "path": "benchmarks/reference/RESULTS.md",
+   "lines": 93,
+   "kind": "docs",
+   "district": "benchmarks"
+  },
+  {
+   "path": "benchmarks/reference/candidate.json",
+   "lines": 588,
+   "kind": "data",
+   "district": "benchmarks"
+  },
+  {
+   "path": "benchmarks/reference/constraints.json",
+   "lines": 182,
+   "kind": "data",
+   "district": "benchmarks"
+  },
+  {
+   "path": "benchmarks/reference/evidence/failed-render-003-manifest.json",
+   "lines": 68,
+   "kind": "data",
+   "district": "benchmarks"
+  },
+  {
+   "path": "benchmarks/reference/evidence/failed-render-003-report.json",
+   "lines": 221,
+   "kind": "data",
+   "district": "benchmarks"
+  },
+  {
+   "path": "benchmarks/reference/evidence/manifest.json",
+   "lines": 68,
+   "kind": "data",
+   "district": "benchmarks"
+  },
+  {
+   "path": "benchmarks/reference/evidence/report.json",
+   "lines": 221,
+   "kind": "data",
+   "district": "benchmarks"
+  },
+  {
+   "path": "benchmarks/reference/evidence/retained-failures.json",
+   "lines": 50,
+   "kind": "data",
+   "district": "benchmarks"
+  },
+  {
+   "path": "benchmarks/reference/evidence/video-sha256.txt",
+   "lines": 1,
+   "kind": "docs",
+   "district": "benchmarks"
+  },
+  {
+   "path": "benchmarks/reference/prompt.txt",
+   "lines": 1,
+   "kind": "docs",
+   "district": "benchmarks"
+  },
+  {
+   "path": "benchmarks/reference/speech-model-lock.json",
+   "lines": 5,
+   "kind": "data",
+   "district": "benchmarks"
+  },
+  {
+   "path": "compositions/code-to-frames/index.html",
+   "lines": 288,
+   "kind": "html",
+   "district": "compositions"
+  },
+  {
+   "path": "compositions/how-code-becomes-video/corpus.json",
+   "lines": 222,
+   "kind": "data",
+   "district": "compositions"
+  },
+  {
+   "path": "compositions/how-code-becomes-video/index.html",
+   "lines": 1554,
+   "kind": "html",
+   "district": "compositions"
+  },
+  {
+   "path": "docs/AUTHORING.md",
+   "lines": 281,
+   "kind": "docs",
+   "district": "docs"
+  },
+  {
+   "path": "docs/CODEX_GOAL_HANDOFF.md",
+   "lines": 96,
+   "kind": "docs",
+   "district": "docs"
+  },
+  {
+   "path": "docs/MEASUREMENT.md",
+   "lines": 153,
+   "kind": "docs",
+   "district": "docs"
+  },
+  {
+   "path": "docs/OPUS_VIDEO_RESEARCH.md",
+   "lines": 370,
+   "kind": "docs",
+   "district": "docs"
+  },
+  {
+   "path": "docs/PDOOM_ENGINE.md",
+   "lines": 35,
+   "kind": "docs",
+   "district": "docs"
+  },
+  {
+   "path": "docs/PRODUCTION_SETUP.md",
+   "lines": 91,
+   "kind": "docs",
+   "district": "docs"
+  },
+  {
+   "path": "docs/REVERSE_ENGINEERING.md",
+   "lines": 84,
+   "kind": "docs",
+   "district": "docs"
+  },
+  {
+   "path": "docs/SINGLE_PROMPT.md",
+   "lines": 62,
+   "kind": "docs",
+   "district": "docs"
+  },
+  {
+   "path": "examples/atl.json",
+   "lines": 26,
+   "kind": "data",
+   "district": "examples"
+  },
+  {
+   "path": "examples/broken.json",
+   "lines": 16,
+   "kind": "data",
+   "district": "examples"
+  },
+  {
+   "path": "examples/explainer.json",
+   "lines": 35,
+   "kind": "data",
+   "district": "examples"
+  },
+  {
+   "path": "examples/how-code-becomes-video.json",
+   "lines": 126,
+   "kind": "data",
+   "district": "examples"
+  },
+  {
+   "path": "examples/html.json",
+   "lines": 45,
+   "kind": "data",
+   "district": "examples"
+  },
+  {
+   "path": "pyproject.toml",
+   "lines": 19,
+   "kind": "config",
+   "district": "root"
+  },
+  {
+   "path": "requirements-production.txt",
+   "lines": 5,
+   "kind": "docs",
+   "district": "root"
+  },
+  {
+   "path": "requirements.txt",
+   "lines": 2,
+   "kind": "docs",
+   "district": "root"
+  },
+  {
+   "path": "scenes/broken.py",
+   "lines": 8,
+   "kind": "python",
+   "district": "scenes"
+  },
+  {
+   "path": "scenes/browser.py",
+   "lines": 1,
+   "kind": "python",
+   "district": "scenes"
+  },
+  {
+   "path": "scenes/editorial.py",
+   "lines": 42,
+   "kind": "python",
+   "district": "scenes"
+  },
+  {
+   "path": "scripts/download_speech_models.py",
+   "lines": 26,
+   "kind": "python",
+   "district": "scripts"
+  },
+  {
+   "path": "scripts/one_prompt.py",
+   "lines": 57,
+   "kind": "python",
+   "district": "scripts"
+  },
+  {
+   "path": "scripts/prepare_fonts.py",
+   "lines": 43,
+   "kind": "python",
+   "district": "scripts"
+  },
+  {
+   "path": "tests/test_api_adapter.py",
+   "lines": 36,
+   "kind": "python",
+   "district": "tests"
+  },
+  {
+   "path": "tests/test_audio.py",
+   "lines": 172,
+   "kind": "python",
+   "district": "tests"
+  },
+  {
+   "path": "tests/test_browser.py",
+   "lines": 50,
+   "kind": "python",
+   "district": "tests"
+  },
+  {
+   "path": "tests/test_decoded_metrics.py",
+   "lines": 126,
+   "kind": "python",
+   "district": "tests"
+  },
+  {
+   "path": "tests/test_harness.py",
+   "lines": 151,
+   "kind": "python",
+   "district": "tests"
+  },
+  {
+   "path": "tests/test_html_backend.py",
+   "lines": 252,
+   "kind": "python",
+   "district": "tests"
+  },
+  {
+   "path": "tests/test_one_prompt.py",
+   "lines": 26,
+   "kind": "python",
+   "district": "tests"
+  },
+  {
+   "path": "tests/test_production.py",
+   "lines": 72,
+   "kind": "python",
+   "district": "tests"
+  },
+  {
+   "path": "tests/test_signals.py",
+   "lines": 160,
+   "kind": "python",
+   "district": "tests"
+  },
+  {
+   "path": "tests/test_tools.py",
+   "lines": 104,
+   "kind": "python",
+   "district": "tests"
+  },
+  {
+   "path": "vch/__init__.py",
+   "lines": 1,
+   "kind": "python",
+   "district": "vch"
+  },
+  {
+   "path": "vch/__main__.py",
+   "lines": 2,
+   "kind": "python",
+   "district": "vch"
+  },
+  {
+   "path": "vch/audio.py",
+   "lines": 248,
+   "kind": "python",
+   "district": "vch"
+  },
+  {
+   "path": "vch/backends.py",
+   "lines": 109,
+   "kind": "python",
+   "district": "vch"
+  },
+  {
+   "path": "vch/cli.py",
+   "lines": 125,
+   "kind": "python",
+   "district": "vch"
+  },
+  {
+   "path": "vch/core.py",
+   "lines": 408,
+   "kind": "python",
+   "district": "vch"
+  },
+  {
+   "path": "vch/evaluate.py",
+   "lines": 279,
+   "kind": "python",
+   "district": "vch"
+  },
+  {
+   "path": "vch/html_backend.py",
+   "lines": 261,
+   "kind": "python",
+   "district": "vch"
+  },
+  {
+   "path": "vch/html_runtime.js",
+   "lines": 270,
+   "kind": "javascript",
+   "district": "vch"
+  },
+  {
+   "path": "vch/narration.py",
+   "lines": 97,
+   "kind": "python",
+   "district": "vch"
+  },
+  {
+   "path": "vch/pipeline.py",
+   "lines": 193,
+   "kind": "python",
+   "district": "vch"
+  },
+  {
+   "path": "vch/production.py",
+   "lines": 128,
+   "kind": "python",
+   "district": "vch"
+  },
+  {
+   "path": "vch/signals.py",
+   "lines": 550,
+   "kind": "python",
+   "district": "vch"
+  },
+  {
+   "path": "vch/tools.py",
+   "lines": 336,
+   "kind": "python",
+   "district": "vch"
+  }
+ ]
+}

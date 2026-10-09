@@ -1,0 +1,84 @@
+{
+  "name": "night-blueprint",
+  "mode": "dark",
+  "notes": "Default. Deep navy, five signal colours, glass panels, bloom and fixed grain.",
+  "type": {
+    "display": "Inter",
+    "text": "Inter",
+    "mono": "JBMono",
+    "headline": 64,
+    "headlineWeight": 720,
+    "headlineSpacing": "-0.028em",
+    "desc": 30,
+    "finale": 92,
+    "finaleWeight": 760,
+    "finaleSpacing": "-0.035em",
+    "wrapScale": 1
+  },
+  "color": {
+    "bg": "#060B18",
+    "sky": [
+      "#0C1532",
+      "#081026",
+      "#050914"
+    ],
+    "haze": "#3D63D8",
+    "ink": "#EEF3FF",
+    "soft": "#AAB7D8",
+    "dim": "#8592B5",
+    "note": "#C9D3EC",
+    "code": "#DCE4F7",
+    "keyword": "#C3A6FF",
+    "accent": "#46E3B7",
+    "second": "#7AA7FF",
+    "third": "#B69CFF",
+    "fourth": "#FFC857",
+    "alert": "#FF7A70",
+    "onDark": "#FFFFFF",
+    "onLight": "#06101F",
+    "panel": [
+      "rgba(22,36,74,0.96)",
+      "rgba(13,23,48,0.95)",
+      "rgba(9,16,35,0.95)"
+    ],
+    "rim": "#A0BEFF",
+    "edge": "#2A3B66",
+    "well": "#0A1226",
+    "lane": "#0F1B38",
+    "grid": "#7A96DC",
+    "highlight": "#7AA7FF",
+    "card": "#22325E",
+    "cardFace": "#13214A",
+    "page": "#EAF0FF",
+    "pageLine": "#9FB0D6",
+    "film": "#2C3E6E",
+    "gate": "#25365F",
+    "gateLit": "#3A5BA8",
+    "trace": "#8FA2D0",
+    "meter": "#16244A",
+    "off": "#33456F",
+    "scrim": "#050914",
+    "shadow": "#000000",
+    "vignette": "#000000",
+    "ghost": [
+      "#C9D3EC",
+      "#5D6C95",
+      "#3A4A75",
+      "#1B2A52"
+    ]
+  },
+  "finish": {
+    "bloom": 0.3,
+    "grain": 0.05,
+    "scanlines": 0,
+    "vignette": 0.45,
+    "glow": 1,
+    "shadow": 0.55,
+    "beam": 1,
+    "shade": [
+      1,
+      0.62,
+      0.42
+    ]
+  }
+}

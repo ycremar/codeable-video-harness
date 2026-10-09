@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Orbit</title>
+<!--
+  Short three.js clip (contract: examples/three-orbit.json). A generic Earth-like planet (seeded procedural
+  texture, not satellite imagery), a cloud shell and a fresnel atmosphere, a seeded starfield, and a small
+  station passing the camera; the sun rises over the limb at a cue. Everything is set from t.
+  Fact on screen: a station about 400 km up circles Earth about every 92 minutes.
+-->
+<style>
+  @font-face { font-family: "Inter"; src: url("/assets/fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
+  @font-face { font-family: "JBMono"; src: url("/assets/fonts/JetBrainsMono.ttf") format("truetype"); font-weight: 100 800; }
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  #stage { position: relative; width: 1280px; height: 720px; overflow: hidden; background: #000000; transform-origin: 0 0;
+           font-family: "Inter", sans-serif; color: #FFFFFF; }
+  canvas { position: absolute; left: 0; top: 0; }
+  .abs { position: absolute; left: 0; top: 0; white-space: nowrap; }
+  .kicker { font: 600 22px/1.2 "JBMono", monospace; letter-spacing: 0.3em; color: #A9C8FF; }
+  .title { font-weight: 300; font-size: 68px; line-height: 1.02; letter-spacing: -0.02em; }
+  .mask { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 0.05em 0.12em 0; margin-bottom: -0.12em; }
+  .word { display: inline-block; }
+  .caption { font-size: 24px; line-height: 1.45; color: #D5DEEE; white-space: normal; width: 430px; }
+  .stat { font: 500 22px/1.2 "JBMono", monospace; color: #FFFFFF; }
+</style>
+<script type="importmap">{ "imports": { "three": "/compositions/_vendor/three/build/three.module.js",
+                                         "three/addons/": "/compositions/_vendor/three/addons/" } }</script>
+</head>
+<body>
+<div id="stage"><canvas id="gl" width="1280" height="720"></canvas><div id="dom"></div></div>
+<script type="module">
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { BokehPass } from "three/addons/postprocessing/BokehPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { clamp, lerp, ease, easeOut, smooth, spring, seeded, loadContract, el, show, place, maskedWords, riseWords, preview } from "/compositions/_lib/clip.js";
+
+const W = 1280, H = 720, R = 6;
+const vch = (window.__vch = window.__vch || {});
+let renderer, composer, scene, camera, bokeh, planet, clouds, sunLight, sunDisc, station, C, T, TEXT;
+const dom = document.getElementById("dom");
+
+// Seeded value noise on a sphere, sampled into an equirectangular canvas once at load.
+function noiseField(seed) {
+  const rand = seeded(seed), grid = Array.from({ length: 64 * 32 }, () => rand());
+  const at = (i, j) => grid[((j % 32) + 32) % 32 * 64 + ((i % 64) + 64) % 64];
+  const smoothstep = (x) => x * x * (3 - 2 * x);
+  return (u, v) => {
+    let sum = 0, amp = 1, norm = 0;
+    for (let o = 0; o < 5; o++) {
+      const f = 2 ** o, x = u * 64 * f / 4, y = v * 32 * f / 4, i = Math.floor(x), j = Math.floor(y), fx = smoothstep(x - i), fy = smoothstep(y - j);
+      const a = at(i, j), b = at(i + 1, j), c = at(i, j + 1), d = at(i + 1, j + 1);
+      sum += amp * lerp(lerp(a, b, fx), lerp(c, d, fx), fy); norm += amp; amp *= 0.5;
+    }
+    return sum / norm;
+  };
+}
+function planetTextures() {
+  const w = 1024, h = 512, land = noiseField(17), cloud = noiseField(29);
+  const surface = document.createElement("canvas"), sky = document.createElement("canvas");
+  surface.width = sky.width = w; surface.height = sky.height = h;
+  const sg = surface.getContext("2d"), cg = sky.getContext("2d");
+  const si = sg.createImageData(w, h), ci = cg.createImageData(w, h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const u = x / w, v = y / h, lat = Math.abs(v - 0.5) * 2, n = land(u, v), k = (y * w + x) * 4;
+    let rgb;
+    if (n > 0.53) { const g = (n - 0.53) / 0.47; rgb = [lerp(70, 150, g), lerp(110, 120, g), lerp(55, 70, g)]; }
+    else { const d = n / 0.53; rgb = [lerp(8, 22, d), lerp(28, 74, d), lerp(70, 128, d)]; }
+    si.data.set([...rgb.map(Math.round), 255], k);
+    const c = clamp((cloud(u * 1.7, v) - 0.5) * 3.2);
+    ci.data.set([255, 255, 255, Math.round(255 * c * 0.9)], k);
+  }
+  sg.putImageData(si, 0, 0); cg.putImageData(ci, 0, 0);
+  const a = new THREE.CanvasTexture(surface), b = new THREE.CanvasTexture(sky);
+  a.colorSpace = b.colorSpace = THREE.SRGBColorSpace;
+  return [a, b];
+}
+
+function build() {
+  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("gl"), antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(34, W / H, 0.05, 400);
+
+  const [surface, cloudTex] = planetTextures();
+  planet = new THREE.Mesh(new THREE.SphereGeometry(R, 128, 64), new THREE.MeshStandardMaterial({ map: surface, roughness: 0.92, metalness: 0 }));
+  clouds = new THREE.Mesh(new THREE.SphereGeometry(R * 1.012, 128, 64),
+    new THREE.MeshStandardMaterial({ map: cloudTex, transparent: true, depthWrite: false, roughness: 1 }));
+  // Tilt the globe so the camera, riding above it, sees mid-latitudes rather than the texture's pole.
+  const globe = new THREE.Group(); globe.rotation.x = -1.15; globe.add(planet, clouds); scene.add(globe);
+  const atmosphere = new THREE.Mesh(new THREE.SphereGeometry(R * 1.06, 96, 48), new THREE.ShaderMaterial({
+    side: THREE.BackSide, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false,
+    uniforms: { sun: { value: new THREE.Vector3(1, 0, 0) } },
+    vertexShader: "varying vec3 vN; varying vec3 vW; void main(){ vN = normalize(normalMatrix * normal); vec4 w = modelMatrix * vec4(position,1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }",
+    fragmentShader: "uniform vec3 sun; varying vec3 vN; varying vec3 vW; void main(){ float rim = pow(clamp(1.0 - abs(dot(vN, vec3(0.0,0.0,1.0))), 0.0, 1.0), 4.5);" +
+      " float lit = clamp(dot(normalize(vW), sun) * 0.7 + 0.45, 0.04, 1.0); gl_FragColor = vec4(vec3(0.30,0.60,1.0) * rim * lit * 1.25, rim * lit); }" }));
+  atmosphere.userData.material = atmosphere.material;
+  scene.add(atmosphere);
+  planet.userData.atmosphere = atmosphere;
+
+  const rand = seeded(3), stars = new Float32Array(2400 * 3);
+  for (let i = 0; i < 2400; i++) {
+    const th = rand() * Math.PI * 2, ph = Math.acos(2 * rand() - 1), r = 160;
+    stars.set([r * Math.sin(ph) * Math.cos(th), r * Math.cos(ph), r * Math.sin(ph) * Math.sin(th)], i * 3);
+  }
+  const starGeo = new THREE.BufferGeometry(); starGeo.setAttribute("position", new THREE.Float32BufferAttribute(stars, 3));
+  scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: "#DDE6FF", size: 0.55, sizeAttenuation: true })));
+
+  sunLight = new THREE.DirectionalLight("#FFF3E0", 0); scene.add(sunLight);
+  scene.add(new THREE.AmbientLight("#1A2440", 0.35));
+  // A soft light riding with the camera so the station reads on the night side.
+  const rider = new THREE.PointLight("#9FB8FF", 6, 8, 2); camera.add(rider); rider.position.set(0.6, 0.8, 0.5); scene.add(camera);
+  sunDisc = new THREE.Mesh(new THREE.SphereGeometry(1.4, 32, 16), new THREE.MeshBasicMaterial({ color: new THREE.Color(6, 5.4, 4.6), toneMapped: false }));
+  scene.add(sunDisc);
+
+  station = new THREE.Group();
+  const metal = new THREE.MeshStandardMaterial({ color: "#D8DCE4", metalness: 0.85, roughness: 0.35 });
+  const panelMat = new THREE.MeshStandardMaterial({ color: "#2B4C9A", metalness: 0.5, roughness: 0.3, emissive: "#16306E", emissiveIntensity: 0.8 });
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.9, 24), metal); hub.rotation.z = Math.PI / 2; station.add(hub);
+  const truss = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 2.6), metal); station.add(truss);
+  for (const side of [-1, 1]) for (const k of [0, 1]) {
+    const p = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.012, 0.3), panelMat); p.position.set(0, 0, side * (0.75 + 0.42 * k)); station.add(p);
+  }
+  station.scale.setScalar(0.45); scene.add(station);
+
+  const target = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, target);
+  composer.addPass(new RenderPass(scene, camera));
+  bokeh = new BokehPass(scene, camera, { focus: 3, aperture: 0.0004, maxblur: 0.006 });
+  composer.addPass(bokeh);
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.9, 0.6, 0.8));
+  composer.addPass(new OutputPass());
+}
+
+function buildText() {
+  const kicker = el(dom, "abs kicker", "ORBIT", "kicker");
+  const title = el(dom, "abs title", undefined, "title");
+  const words = maskedWords(title, "Ninety-two minutes");
+  const caption = el(dom, "abs caption", "A station about 400 km up circles Earth roughly every 92 minutes: about sixteen sunrises a day.", "caption");
+  const stat = el(dom, "abs stat", "", "stat");
+  TEXT = { kicker, title, words, caption, stat };
+}
+
+function seek(t) {
+  const u = t / T.duration;
+  planet.rotation.y = 0.35 + t * 0.06; clouds.rotation.y = 0.35 + t * 0.085;
+  // The sun starts behind the limb and clears it at the cue.
+  const rise = smooth((t - C("sunrise") + 0.6) / 1.4);
+  const sunDir = new THREE.Vector3(lerp(-0.3, 0.55, rise), lerp(-0.55, 0.22, rise), -1).normalize();
+  sunDisc.position.copy(sunDir.clone().multiplyScalar(120));
+  sunLight.position.copy(sunDir.clone().multiplyScalar(30)); sunLight.intensity = 0.15 + 3.4 * rise;
+  planet.userData.atmosphere.material.uniforms.sun.value.copy(sunDir);
+  // Camera rides above the limb; the station passes close to the lens.
+  camera.position.set(lerp(-2.2, 2.2, u), R + lerp(0.8, 1.6, ease(u)), lerp(7.8, 5.9, u));
+  camera.lookAt(lerp(-2.2, 0.9, u), R * 0.86, -4);
+  // A small push-in as the station passes closest (its cue), settling over half a second.
+  const close = t >= C("station.close") ? (1 - Math.exp(-(t - C("station.close")) / 0.03)) * Math.exp(-(t - C("station.close")) / 0.3) : 0;
+  camera.fov = 34 * (1 - 0.035 * close); camera.updateProjectionMatrix();
+  camera.updateMatrixWorld();
+  // The station crosses the lower third of the frame, close to the lens.
+  const pass = clamp((t - C("station.pass")) / 4.6), along = new THREE.Vector3(lerp(-1.9, 2.1, ease(pass)), lerp(-0.62, -0.38, pass), -3.6);
+  station.position.copy(camera.localToWorld(along));
+  station.rotation.set(0.25 + 0.2 * pass, 0.6 + 0.9 * pass, 0.1);
+  bokeh.uniforms.focus.value = camera.position.distanceTo(station.position);
+  composer.render();
+  place(TEXT.kicker, 64, 52, "l", smooth((t - C("title.in") + 0.2) / 0.3));
+  place(TEXT.title, 64, 86, "l", 1); riseWords(TEXT.words, t, C("title.in"));
+  place(TEXT.caption, 64, 172, "l", smooth((t - C("caption.in")) / 0.4));
+  const minutes = clamp((t - C("count")) / 2.2) * 92;
+  TEXT.stat.textContent = `orbit ${String(Math.round(minutes)).padStart(2, "0")} / 92 min · 400 km`;
+  place(TEXT.stat, 64, H - 36 - 44, "l", smooth((t - C("count")) / 0.3));
+}
+
+vch.seek = seek;
+vch.ready = loadContract("/examples/three-orbit.json").then((loaded) => {
+  C = loaded.cue; T = { duration: loaded.contract.video.duration };
+  build(); buildText();
+  if (!loaded.harness) preview(document.getElementById("stage"), W, H, T.duration, seek);
+});
+</script>
+</body>
+</html>

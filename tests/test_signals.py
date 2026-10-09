@@ -44,6 +44,35 @@ class DensityTests(unittest.TestCase):
         self.assertAlmostEqual(signals.frame_density(grey)['colourfulness'], 0.0)
 
 
+class StyleTests(unittest.TestCase):
+    @staticmethod
+    def frame(background, accent):
+        f = np.zeros((90, 160, 3), dtype=np.uint8)
+        f[...] = background
+        f[30:60, 40:120] = accent
+        return f
+
+    def summary(self, frame):
+        feat = signals.style_features(frame)
+        return {**feat, "dominant_hue": signals.HUE_NAMES[int(np.argmax(feat["hue_share"]))]}
+
+    def test_brightness_and_hue_follow_the_palette(self):
+        night = self.summary(self.frame((8, 16, 38), (70, 227, 183)))
+        paper = self.summary(self.frame((243, 240, 232), (168, 20, 26)))
+        self.assertLess(night["luma"], 0.25)
+        self.assertGreater(paper["luma"], 0.75)
+        self.assertEqual(night["dominant_hue"], "teal")
+        self.assertEqual(paper["dominant_hue"], "red")
+
+    def test_distance_is_zero_for_identical_and_grows_with_difference(self):
+        a = self.summary(self.frame((8, 16, 38), (70, 227, 183)))
+        near = self.summary(self.frame((10, 18, 42), (70, 220, 180)))
+        far = self.summary(self.frame((243, 240, 232), (168, 20, 26)))
+        self.assertEqual(signals.style_distance(a, a), 0.0)
+        self.assertLess(signals.style_distance(a, near), signals.style_distance(a, far))
+        self.assertGreater(signals.style_distance(a, far), 1.0)
+
+
 class OnsetTests(unittest.TestCase):
     def test_onsets_land_on_measured_peaks(self):
         times = [0.0, 0.5, 1.25, 2.0]

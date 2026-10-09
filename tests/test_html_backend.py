@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from vch.backends import create_renderer
-from vch.core import canonical, load_contract, validate
+from vch.core import canonical, load_contract, resolve_style, validate
 from vch.evaluate import evaluate
 from vch.pipeline import render
 from vch.production import writable
@@ -51,6 +51,8 @@ window.__vch.seek = (t) => { gl.clearColor(1, 0, 0, 1); gl.clear(gl.COLOR_BUFFER
 </script></body></html>'''
 
 NETWORK = PURE.replace('<script>', '<script>fetch("https://example.com/beacon").catch(() => {});')
+CONSOLE_ERROR = PURE.replace("window.__vch.seek = (t) => {", "window.__vch.seek = (t) => {\n  if (t > 0.4) console.error('shader failed to compile');")
+LIBRARY = PURE.replace('<script>', '<script type="module">import { lerp } from "/lib/motion.js"; window.__lerp = lerp;</script><script>')
 UNDECLARED = PURE.replace('<script>', '<img src="/secret.png" style="display:none"><script>')
 
 
@@ -107,7 +109,30 @@ class HtmlContractTests(unittest.TestCase):
         spec = contract(assets=[{'path': 'comp/photo.png', 'source': 'own photo', 'license': 'owned by tester'}])
         validate(spec, self.project.root)
 
+    def test_style_pack_is_inlined_and_validated(self):
+        spec = json.loads((ROOT/'examples/how-code-becomes-video.json').read_text())
+        spec['style'] = 'styles/paper-swiss.json'
+        checked = validate(copy.deepcopy(spec), ROOT)
+        self.assertEqual(checked['style']['mode'], 'light')
+        self.assertEqual(checked['style']['source'], 'styles/paper-swiss.json')
+        for bad in ({'mode': 'sepia'}, {'color': {'ink': '#12345'}}, '../outside.json', 'styles/missing.json', 7):
+            broken = copy.deepcopy(spec)
+            broken['style'] = bad
+            with self.assertRaises(ValueError, msg=bad):
+                validate(broken, ROOT)
+
+    def test_library_folder_assets_must_be_real_folders(self):
+        spec = json.loads((ROOT/'examples/three-prism.json').read_text())
+        self.assertEqual(validate(copy.deepcopy(spec), ROOT)['html']['entry'], 'compositions/three-prism/index.html')
+        for path in ('compositions/_vendor/missing/', 'compositions/_vendor/three/LICENSE/', '.github/'):
+            broken = copy.deepcopy(spec)
+            broken['assets'][2]['path'] = path
+            with self.assertRaises(ValueError, msg=path):
+                validate(broken, ROOT)
+
     def test_author_write_scope(self):
+        self.assertFalse(writable(Path('compositions/_vendor/three/build/three.module.js')))
+        self.assertFalse(writable(Path('compositions/_lib/clip.js')))
         self.assertTrue(writable(Path('compositions/film/index.html')))
         self.assertTrue(writable(Path('compositions/film/js/motion.js')))
         self.assertTrue(writable(Path('scenes/a.py')))
@@ -132,6 +157,35 @@ class HtmlBrowserTests(unittest.TestCase):
             self.assertEqual(row['status'], 'pass', (key, row))
         manifest = json.loads((out/'manifest.json').read_text())
         self.assertIn('html-composition', manifest['runtime']['renderer']['name'])
+
+    def test_console_error_blocks_the_render(self):
+        with self.assertRaisesRegex(RuntimeError, 'console.error: shader failed'):
+            self.render(CONSOLE_ERROR, 'console')
+
+    def test_declared_library_folder_is_served_and_others_are_not(self):
+        project = Project(LIBRARY)
+        self.addCleanup(project.close)
+        (project.root/'lib').mkdir()
+        (project.root/'lib/motion.js').write_text('export const lerp = (a, b, p) => a + (b - a) * p;\n')
+        library = {'path': 'lib/', 'source': 'test fixture', 'license': 'MIT'}
+        spec = contract(assets=[library])
+        validate(spec, project.root)
+        rows = {r['id']: r for r in evaluate(render(spec, project.root, project.root/'runs/lib', True))['requirements']}
+        self.assertEqual(rows['SEEK']['status'], 'pass')
+        with self.assertRaisesRegex(ValueError, 'missing or outside'):
+            render(contract(), project.root, project.root/'runs/nolib', True)
+
+    def test_three_clip_seeks_purely(self):
+        spec, root = load_contract(ROOT/'examples/three-pulse.json')
+        renderer = create_renderer(spec, root, True)
+        try:
+            seen = {}
+            for t in (1.0, 4.5, 2.25, 4.5, 1.0, 2.25):
+                frame = renderer.render(t)
+                key = hashlib.sha256(frame.image.tobytes() + canonical(frame.elements).encode()).hexdigest()
+                self.assertEqual(seen.setdefault(t, key), key, f'seek order changed t={t}')
+        finally:
+            renderer.close()
 
     def test_state_carried_between_frames_is_detected(self):
         rows, _ = self.render(IMPURE, 'impure')
@@ -217,6 +271,23 @@ class HtmlBrowserTests(unittest.TestCase):
         # Counts on screen come from the contract and the corpus file, not from literals in the composition.
         self.assertIn(f"{len(spec['requirements'])} requirements, frozen before the render", texts)
         self.assertIn('frame 0297 / 1,440', texts)
+
+    def test_style_pack_reskins_the_same_film(self):
+        spec, root = load_contract(ROOT/'examples/how-code-becomes-video.json')
+        luma = {}
+        for name in ('night-blueprint', 'paper-swiss'):
+            styled = copy.deepcopy(spec)
+            styled['style'] = resolve_style(f'styles/{name}.json', root)
+            renderer = create_renderer(styled, root, True)
+            try:
+                frame = renderer.render(9.9)
+            finally:
+                renderer.close()
+            luma[name] = float(np.asarray(frame.image.convert('L')).mean()) / 255
+            texts = ' '.join(e['text'] for e in frame.elements if e.get('type') == 'text')
+            self.assertIn('The prompt reads', texts)
+        self.assertLess(luma['night-blueprint'], 0.25)
+        self.assertGreater(luma['paper-swiss'], 0.7)
 
 
 if __name__ == '__main__':

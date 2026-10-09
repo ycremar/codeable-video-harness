@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Pulse</title>
+<!--
+  Short three.js clip (contract: examples/three-pulse.json). 720 instanced blocks; every cue in the
+  contract's timing.hits launches a ripple from a seeded point, so picture and sound share one cue sheet.
+  Height(x, z, t) is a closed-form sum over the ripples started before t: nothing accumulates between frames.
+-->
+<style>
+  @font-face { font-family: "Inter"; src: url("/assets/fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
+  @font-face { font-family: "JBMono"; src: url("/assets/fonts/JetBrainsMono.ttf") format("truetype"); font-weight: 100 800; }
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  #stage { position: relative; width: 1280px; height: 720px; overflow: hidden; background: #07020F; transform-origin: 0 0;
+           font-family: "Inter", sans-serif; color: #FFFFFF; }
+  canvas { position: absolute; left: 0; top: 0; }
+  .abs { position: absolute; left: 0; top: 0; white-space: nowrap; }
+  .kicker { font: 600 22px/1.2 "JBMono", monospace; letter-spacing: 0.3em; color: #FF8AD8; }
+  .title { font-weight: 900; font-size: 72px; line-height: 0.98; letter-spacing: -0.04em; text-transform: uppercase; }
+  .mask { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 0.05em 0.12em 0; margin-bottom: -0.12em; }
+  .word { display: inline-block; }
+  .caption { font-size: 23px; line-height: 1.4; color: #E9DDFF; white-space: normal; width: 420px; }
+  .counter { font: 700 22px/1.2 "JBMono", monospace; color: #7FF3FF; }
+  #shade { position: absolute; left: 0; top: 0; width: 760px; height: 720px; pointer-events: none;
+           background: linear-gradient(90deg, rgba(7,2,15,0.82) 0%, rgba(7,2,15,0.55) 55%, rgba(7,2,15,0) 100%); }
+</style>
+<script type="importmap">{ "imports": { "three": "/compositions/_vendor/three/build/three.module.js",
+                                         "three/addons/": "/compositions/_vendor/three/addons/" } }</script>
+</head>
+<body>
+<div id="stage"><canvas id="gl" width="1280" height="720"></canvas><div id="shade"></div><div id="dom"></div></div>
+<script type="module">
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { clamp, lerp, ease, easeOut, smooth, seeded, loadContract, el, show, place, maskedWords, riseWords, preview } from "/compositions/_lib/clip.js";
+
+const W = 1280, H = 720, NX = 36, NZ = 20, PITCH = 0.62;
+const vch = (window.__vch = window.__vch || {});
+let renderer, composer, scene, camera, blocks, cells, ripples, C, T, TEXT, HITS;
+const dom = document.getElementById("dom");
+const LOW = new THREE.Color("#2A0B5E"), MID = new THREE.Color("#FF2FB4"), HIGH = new THREE.Color("#5FF6FF");
+const STRENGTH = { impact: 1.0, chime: 0.85, whoosh: 0.75, tick: 0.38 };
+
+function build() {
+  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("gl"), antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color("#07020F");
+  scene.fog = new THREE.Fog("#07020F", 9, 30);
+  camera = new THREE.PerspectiveCamera(40, W / H, 0.1, 100);
+  scene.add(new THREE.HemisphereLight("#6A4CFF", "#0A0018", 0.5));
+  const key = new THREE.DirectionalLight("#FFFFFF", 0.6); key.position.set(4, 8, 6); scene.add(key);
+
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: "#05010B", roughness: 0.35, metalness: 0.4 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -0.02; scene.add(floor);
+
+  const geo = new RoundedBoxGeometry(PITCH * 0.82, 1, PITCH * 0.82, 2, 0.06); geo.translate(0, 0.5, 0);
+  blocks = new THREE.InstancedMesh(geo, new THREE.MeshStandardMaterial({ roughness: 0.4, metalness: 0.1, emissive: "#FFFFFF", emissiveIntensity: 0.32,
+                                                                         vertexColors: false }), NX * NZ);
+  blocks.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(NX * NZ * 3), 3);
+  blocks.material.onBeforeCompile = (shader) => {
+    // Instance colour drives emission too, so each block glows in its own colour.
+    shader.fragmentShader = shader.fragmentShader.replace("vec3 totalEmissiveRadiance = emissive;",
+      "vec3 totalEmissiveRadiance = emissive * vColor.rgb;");
+  };
+  scene.add(blocks);
+  cells = [];
+  for (let i = 0; i < NX; i++) for (let k = 0; k < NZ; k++) cells.push({ x: (i - (NX - 1) / 2) * PITCH, z: (k - (NZ - 1) / 2) * PITCH });
+
+  // One ripple per cue, from a seeded origin on the field.
+  const rand = seeded(23);
+  ripples = HITS.map((h) => ({ t: h.t, a: STRENGTH[h.kind] || 0.6, x: lerp(-8, 8, rand()), z: lerp(-4, 4, rand()) }));
+
+  const target = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, target);
+  composer.addPass(new RenderPass(scene, camera));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.55, 0.4, 0.72));
+  composer.addPass(new OutputPass());
+}
+
+// Closed form: each ripple is a ring travelling at 9 units/s that decays over 0.9 s.
+function heightAt(x, z, t) {
+  let h = 0.12 + 0.05 * Math.sin(0.6 * x + 1.7 * t) * Math.cos(0.5 * z - 1.1 * t);
+  for (const r of ripples) {
+    const age = t - r.t;
+    if (age < 0 || age > 2.2) continue;
+    const d = Math.hypot(x - r.x, z - r.z), front = 9 * age;
+    h += r.a * Math.exp(-((d - front) ** 2) / 1.2) * Math.exp(-age / 0.9);
+  }
+  return h;
+}
+
+function buildText() {
+  const kicker = el(dom, "abs kicker", "SOUND", "kicker");
+  const title = el(dom, "abs title", undefined, "title");
+  const words = maskedWords(title, "Every beat, a wave");
+  const caption = el(dom, "abs caption", `${NX * NZ} blocks. Each ripple starts on a cue from this clip's own cue sheet.`, "caption");
+  const counter = el(dom, "abs counter", "", "counter");
+  TEXT = { kicker, title, words, caption, counter };
+}
+
+function seek(t) {
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), p = new THREE.Vector3(), s = new THREE.Vector3(), col = new THREE.Color();
+  cells.forEach((c, i) => {
+    const h = heightAt(c.x, c.z, t);
+    p.set(c.x, 0, c.z); s.set(1, 0.05 + h * 1.25, 1); m.compose(p, q, s); blocks.setMatrixAt(i, m);
+    const k = clamp(h / 0.9);
+    col.copy(LOW).lerp(MID, smooth(k * 1.6)).lerp(HIGH, smooth((k - 0.55) / 0.45));
+    blocks.setColorAt(i, col);
+  });
+  blocks.instanceMatrix.needsUpdate = true; blocks.instanceColor.needsUpdate = true;
+  const u = t / T.duration;
+  camera.position.set(lerp(-9, 7, u), lerp(3.4, 5.2, Math.sin(u * Math.PI) * 0.5 + 0.25 * u), lerp(11, 8.6, u));
+  camera.up.set(Math.sin(lerp(-0.05, 0.05, u)), 1, 0).normalize();
+  camera.lookAt(lerp(-1, 1.5, u), 0.4, 0);
+  composer.render();
+  place(TEXT.kicker, 64, 52, "l", smooth((t - C("title.in") + 0.2) / 0.3));
+  place(TEXT.title, 64, 86, "l", 1); riseWords(TEXT.words, t, C("title.in"), 0.07);
+  place(TEXT.caption, 64, 252, "l", smooth((t - C("caption.in")) / 0.4));
+  const fired = HITS.filter((h) => h.t <= t).length;
+  TEXT.counter.textContent = `cue ${String(fired).padStart(2, "0")} / ${HITS.length}`;
+  place(TEXT.counter, 64, H - 36 - 40, "l", smooth((t - C("title.in")) / 0.3));
+}
+
+vch.seek = seek;
+vch.ready = loadContract("/examples/three-pulse.json").then((loaded) => {
+  C = loaded.cue; HITS = loaded.hits; T = { duration: loaded.contract.video.duration };
+  build(); buildText();
+  if (!loaded.harness) preview(document.getElementById("stage"), W, H, T.duration, seek);
+});
+</script>
+</body>
+</html>

@@ -299,6 +299,54 @@ CDP's lossless fast-PNG mode: pixel-identical, about 2.5x faster than Playwright
 Together they cut steady-state capture from about 350 ms to about 90 ms per 1080p frame. The
 48-second film now renders and is fully evaluated in about 6 minutes.
 
+## Style diversity (2026-10-08)
+
+**How varied the corpus is** (**Observed**, one poster per entry, 511 of 513; posters are
+representative frames, so these describe a still, not motion):
+
+| Descriptor | Corpus |
+|---|---|
+| Background brightness | 43% light (luma > 0.55), 35% mid-tone, 23% dark |
+| Dominant hue | neutral 27%, red 21%, orange 13%, azure 12%, blue 6%, cyan 6%, rose 4% |
+| Colourfulness (Hasler–Süsstrunk) | p10 8, median 31, p90 83 |
+| Pairwise style distance (`vch diversity`) | p10 0.82, median 1.34, p90 2.02 |
+
+**Where our films sat before style packs.** The first example is lighter than 91% of the corpus,
+with an almost single-colour palette (3rd percentile). The 48-second explainer is darker than 97%
+of the corpus and mostly azure. They sit at the two extremes, chosen by the author, not by the brief.
+
+**What prompts name** (**Stated**; 513 prompts):
+
+- **Looks:** cinematic/film (27), minimal (22), paper, collage or halftone (15), glass, clay or 3D
+  product (13), kinetic typography (12), CRT, terminal or ASCII (11), pixel/voxel (11),
+  hand-drawn (11), monochrome (10), anime/comic (9).
+- **Specs:** brand, design tokens or style guide (38); a reference image or video (13); hex colours
+  (8); named fonts (18; Geist 13, Inter 11).
+
+Briefs pin brand colours and fonts far more often than a named aesthetic. The strongest style cues
+are named looks ("halftone xerox", "papery feel") combined with a recurring visual anchor, for
+example a cat's eyes that watch, blink on the beat and land on the logo.
+
+**What this repository now does.** Contracts take a `style` pack of design tokens by role (`styles/`;
+inlined into the run's contract). `--style` swaps packs per run, and `vch diversity` measures the
+spread. The same 48-second film in three original packs passes the same 22 machine checks:
+
+| Pack | Luma | Dominant hue | Distance to night | to paper | to terminal |
+|---|---|---|---|---|---|
+| night-blueprint | 0.09 | azure | — | 1.28 | 0.79 |
+| paper-swiss | 0.89 | neutral (red accent) | 1.28 | — | 1.43 |
+| phosphor-terminal | 0.05 | teal | 0.79 | 1.43 | — |
+
+Light against dark spans a typical corpus pair. The two dark packs measure closer than 90% of
+corpus pairs, even though a monospace face, scanlines and a phosphor palette read as a different
+look. The descriptors see colour and detail, not typeface, texture, layout, motion or sound.
+Paper's red failed text contrast twice before passing (3.7, then 4.45, then 4.53:1). A fill colour
+does not automatically make a text colour.
+
+**Limits.** A pack re-skins one structure. The corpus's real variety also comes from structure:
+kinetic-type showreels, cursor-driven UI demos, cinematic cut lists, games, music videos. That
+variety needs different compositions or a library of motion primitives, not more tokens.
+
 ## Appendix: measured sample
 
 The skillry slugs below were profiled with `python -m vch profile <original.mp4> --out <dir>`.

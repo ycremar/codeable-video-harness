@@ -1,0 +1,84 @@
+{
+  "name": "phosphor-terminal",
+  "mode": "dark",
+  "notes": "CRT phosphor: near-black, green/cyan/amber signal colours, monospace everywhere, fixed scanlines and stronger bloom.",
+  "type": {
+    "display": "JBMono",
+    "text": "JBMono",
+    "mono": "JBMono",
+    "headline": 54,
+    "headlineWeight": 700,
+    "headlineSpacing": "-0.01em",
+    "desc": 27,
+    "finale": 80,
+    "finaleWeight": 800,
+    "finaleSpacing": "-0.02em",
+    "wrapScale": 1.2
+  },
+  "color": {
+    "bg": "#020502",
+    "sky": [
+      "#041008",
+      "#020803",
+      "#010301"
+    ],
+    "haze": "#0F5A22",
+    "ink": "#D6FFE0",
+    "soft": "#7FE69A",
+    "dim": "#3FAF5E",
+    "note": "#A8F5BC",
+    "code": "#C8FFD5",
+    "keyword": "#FFB000",
+    "accent": "#39FF6E",
+    "second": "#3FE0FF",
+    "third": "#B0FF7A",
+    "fourth": "#FFB000",
+    "alert": "#FF5A3C",
+    "onDark": "#EFFFF2",
+    "onLight": "#021004",
+    "panel": [
+      "rgba(6,24,12,0.96)",
+      "rgba(3,14,7,0.95)",
+      "rgba(2,9,4,0.95)"
+    ],
+    "rim": "#39FF6E",
+    "edge": "#1D5C2E",
+    "well": "#020A04",
+    "lane": "#041407",
+    "grid": "#2FCB5A",
+    "highlight": "#39FF6E",
+    "card": "#0E3A1B",
+    "cardFace": "#03140A",
+    "page": "#C8FFD5",
+    "pageLine": "#2FCB5A",
+    "film": "#145A2A",
+    "gate": "#0D3318",
+    "gateLit": "#1A6B33",
+    "trace": "#5FD884",
+    "meter": "#062612",
+    "off": "#164A26",
+    "scrim": "#010301",
+    "shadow": "#000000",
+    "vignette": "#000000",
+    "ghost": [
+      "#8FE6A8",
+      "#2E7A45",
+      "#1D5C2E",
+      "#0D3318"
+    ]
+  },
+  "finish": {
+    "bloom": 0.4,
+    "grain": 0.06,
+    "scanlines": 0.16,
+    "vignette": 0.6,
+    "glow": 1.25,
+    "shadow": 0.6,
+    "beam": 1,
+    "shade": [
+      1,
+      0.6,
+      0.4
+    ]
+  }
+}

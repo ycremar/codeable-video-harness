@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from vch.pipeline import render
-from vch.tools import compare_profiles, profile_media, render_stills, still_times, storyboard_markdown
+from vch.tools import compare_profiles, diversity_markdown, profile_media, render_stills, still_times, storyboard_markdown
 
 ROOT = Path(__file__).resolve().parents[1]
 SCENE = 'from vch.core import Canvas\ndef render(ctx):\n c=Canvas(96,96,"#334455")\n c.draw.rectangle((5+ctx["t"]*20,30,25+ctx["t"]*20,50),fill="#EEEEEE")\n return c.finish()\n'
@@ -77,6 +77,13 @@ class StillsAndProfileTests(unittest.TestCase):
         moving = summary['stills'][0]['frame_change']
         self.assertGreater(moving, 0)
         self.assertNotIn('frame_change', summary['stills'][1])  # no next frame inside the film
+
+    def test_diversity_of_a_render_with_itself_is_zero(self):
+        run = render(self.spec, self.root, self.root/'runs/diverse', True)
+        table = diversity_markdown([run, run/'video.mp4'])
+        self.assertIn('| diverse | 0.00 | 0.00 |', table)
+        with self.assertRaises(ValueError):
+            diversity_markdown([run])
 
     def test_profile_of_a_render_recovers_tempo_and_frames(self):
         run = render(self.spec, self.root, self.root/'runs/profiled', True)

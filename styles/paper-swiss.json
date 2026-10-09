@@ -1,0 +1,84 @@
+{
+  "name": "paper-swiss",
+  "mode": "light",
+  "notes": "Warm paper, black rules, one deep red accent (dark enough for text on paper) with blue/violet/ochre support; flat panels, no bloom, soft shadows.",
+  "type": {
+    "display": "Inter",
+    "text": "Inter",
+    "mono": "JBMono",
+    "headline": 68,
+    "headlineWeight": 800,
+    "headlineSpacing": "-0.04em",
+    "desc": 30,
+    "finale": 96,
+    "finaleWeight": 820,
+    "finaleSpacing": "-0.045em",
+    "wrapScale": 1
+  },
+  "color": {
+    "bg": "#F3F0E8",
+    "sky": [
+      "#F7F4ED",
+      "#F2EEE6",
+      "#EEE9DF"
+    ],
+    "haze": "#FFFFFF",
+    "ink": "#121212",
+    "soft": "#3A3A40",
+    "dim": "#55555C",
+    "note": "#2A2A30",
+    "code": "#1A1A1A",
+    "keyword": "#5A2FC0",
+    "accent": "#A8141A",
+    "second": "#1F4FD8",
+    "third": "#6B3FD4",
+    "fourth": "#8A5D00",
+    "alert": "#9E3209",
+    "onDark": "#FFFFFF",
+    "onLight": "#121212",
+    "panel": [
+      "rgba(255,255,255,0.98)",
+      "rgba(255,255,255,0.98)",
+      "rgba(250,248,243,0.98)"
+    ],
+    "rim": "#FFFFFF",
+    "edge": "#1A1A1A",
+    "well": "#F1EDE4",
+    "lane": "#E4DFD3",
+    "grid": "#8A8478",
+    "highlight": "#1F4FD8",
+    "card": "#E9E4D8",
+    "cardFace": "#FFFFFF",
+    "page": "#FFFFFF",
+    "pageLine": "#B9B3A6",
+    "film": "#CFC8BA",
+    "gate": "#D9D3C6",
+    "gateLit": "#C4BBA9",
+    "trace": "#6E6A62",
+    "meter": "#E4DFD3",
+    "off": "#C9C3B6",
+    "scrim": "#F3F0E8",
+    "shadow": "#5A5040",
+    "vignette": "#5A5040",
+    "ghost": [
+      "#3A3A40",
+      "#9A958A",
+      "#C9C3B6",
+      "#E4DFD3"
+    ]
+  },
+  "finish": {
+    "bloom": 0,
+    "grain": 0.035,
+    "scanlines": 0,
+    "vignette": 0.05,
+    "glow": 0.35,
+    "shadow": 0.18,
+    "beam": 0.35,
+    "shade": [
+      1,
+      0.86,
+      0.74
+    ]
+  }
+}

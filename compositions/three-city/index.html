@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Repository city</title>
+<!--
+  Short three.js clip (contract: examples/three-city.json). This repository as a city at sunset: one
+  building per tracked text file (repo.json, a `git ls-files` snapshot; vendored libraries excluded),
+  grouped into districts by top-level folder. Height = 0.25 * sqrt(lines); colour = file kind.
+  Low sun with long shadows, haze, window lights at dusk. Everything is set from t.
+-->
+<style>
+  @font-face { font-family: "Inter"; src: url("/assets/fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
+  @font-face { font-family: "JBMono"; src: url("/assets/fonts/JetBrainsMono.ttf") format("truetype"); font-weight: 100 800; }
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  #stage { position: relative; width: 1280px; height: 720px; overflow: hidden; background: #2A2F45; transform-origin: 0 0;
+           font-family: "Inter", sans-serif; color: #FFFFFF; }
+  canvas { position: absolute; left: 0; top: 0; }
+  .abs { position: absolute; left: 0; top: 0; white-space: nowrap; }
+  .kicker { font: 600 22px/1.2 "JBMono", monospace; letter-spacing: 0.24em; color: #FFFFFF; }
+  .title { font-weight: 760; font-size: 58px; line-height: 1.04; letter-spacing: -0.03em; }
+  .mask { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 0.05em 0.12em 0; margin-bottom: -0.12em; }
+  .word { display: inline-block; }
+  .caption { font-size: 23px; line-height: 1.4; color: #FFFFFF; white-space: normal; width: 470px; }
+  .label { font: 600 22px/1.2 "JBMono", monospace; color: #FFFFFF; padding: 4px 10px; background: rgba(20,22,34,0.78); border-radius: 6px; }
+  .key { font: 500 22px/1.2 "JBMono", monospace; color: #FFFFFF; padding: 3px 9px; background: rgba(20,22,34,0.72); border-radius: 6px; }
+  .rule { position: absolute; left: 0; top: 0; height: 2px; background: #FFFFFF; transform-origin: 0 50%; }
+  .panel { position: absolute; left: 0; top: 0; background: rgba(20,22,34,0.62); border-radius: 14px; }
+</style>
+<script type="importmap">{ "imports": { "three": "/compositions/_vendor/three/build/three.module.js",
+                                         "three/addons/": "/compositions/_vendor/three/addons/" } }</script>
+</head>
+<body>
+<div id="stage"><canvas id="gl" width="1280" height="720"></canvas><div id="dom"></div></div>
+<script type="module">
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { BokehPass } from "three/addons/postprocessing/BokehPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { clamp, lerp, ease, easeOut, smooth, spring, seeded, hash, loadContract, el, show, place, maskedWords, riseWords, preview } from "/compositions/_lib/clip.js";
+
+const W = 1280, H = 720;
+const vch = (window.__vch = window.__vch || {});
+const KIND = { python: "#E8A65C", javascript: "#7DB0E0", html: "#7DB0E0", docs: "#F1E4C8", data: "#8DCBB6", shell: "#C7A3DE", config: "#C7A3DE" };
+const LEGEND = [["python", "python"], ["javascript", "js / html"], ["docs", "docs"], ["data", "data"], ["config", "config"]];
+let renderer, composer, scene, camera, bokeh, sun, buildings, windowsMat, C, T, TEXT, DATA, TALL;
+const dom = document.getElementById("dom");
+const height = (lines) => 0.25 * Math.sqrt(Math.max(1, lines));
+
+function layout(files) {
+  const districts = [...new Set(files.map((f) => f.district))].sort((a, b) =>
+    files.filter((f) => f.district === b).reduce((s, f) => s + f.lines, 0) - files.filter((f) => f.district === a).reduce((s, f) => s + f.lines, 0));
+  // Shelf-pack square districts into rows (1.2-unit streets between them), then centre the city.
+  const pitch = 1.1, street = 1.2, rowWidth = 16, out = [];
+  let cx = 0, cz = 0, rowDepth = 0;
+  districts.forEach((d, k) => {
+    const members = files.filter((f) => f.district === d).sort((a, b) => b.lines - a.lines);
+    const side = Math.ceil(Math.sqrt(members.length)), size = side * pitch;
+    if (cx > 0 && cx + size > rowWidth) { cx = 0; cz += rowDepth + street; rowDepth = 0; }
+    members.forEach((f, j) => {
+      out.push({ ...f, x: cx + (j % side + 0.5) * pitch, z: cz + (Math.floor(j / side) + 0.5) * pitch, h: height(f.lines), k });
+    });
+    cx += size + street; rowDepth = Math.max(rowDepth, size);
+  });
+  const mx = (Math.min(...out.map((f) => f.x)) + Math.max(...out.map((f) => f.x))) / 2;
+  const mz = (Math.min(...out.map((f) => f.z)) + Math.max(...out.map((f) => f.z))) / 2;
+  out.forEach((f, j) => { f.x -= mx; f.z -= mz; f.delay = 0.05 * Math.hypot(f.x, f.z) + 0.08 * hash(j + 31 * f.k); });
+  return out;
+}
+
+function windowTexture() {
+  const c = document.createElement("canvas"); c.width = 64; c.height = 256;
+  const g = c.getContext("2d"), rand = seeded(5);
+  g.fillStyle = "#000000"; g.fillRect(0, 0, 64, 256);
+  for (let y = 6; y < 256; y += 12) for (let x = 6; x < 64; x += 14) {
+    if (rand() < 0.55) { const v = Math.round(180 + 75 * rand()); g.fillStyle = `rgb(255,${v},${Math.round(v * 0.62)})`; g.fillRect(x, y, 8, 6); }
+  }
+  const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function sky() {
+  const geo = new THREE.SphereGeometry(80, 32, 16);
+  const mat = new THREE.ShaderMaterial({ side: THREE.BackSide, depthWrite: false, uniforms: {},
+    vertexShader: "varying vec3 vP; void main(){ vP = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }",
+    fragmentShader: "varying vec3 vP; void main(){ float h = clamp(vP.y * 1.6 + 0.08, 0.0, 1.0);" +
+      " vec3 c = mix(vec3(0.98,0.62,0.42), vec3(0.20,0.27,0.48), h); gl_FragColor = vec4(c, 1.0); }" });
+  return new THREE.Mesh(geo, mat);
+}
+
+function build() {
+  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("gl"), antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  scene = new THREE.Scene();
+  scene.fog = new THREE.Fog("#E9A47E", 26, 72);
+  scene.add(sky());
+  camera = new THREE.PerspectiveCamera(38, W / H, 0.1, 200);
+
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: "#3B3640", roughness: 0.95 }));
+  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+  const grid = new THREE.GridHelper(80, 26, "#5B5260", "#4A434F"); grid.position.y = 0.01; scene.add(grid);
+
+  scene.add(new THREE.HemisphereLight("#9CB8E8", "#3A2A20", 0.9));
+  sun = new THREE.DirectionalLight("#FFB27A", 3.2); sun.position.set(-30, 7.5, 12); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 16, bottom: -16, near: 1, far: 90 });
+  sun.shadow.bias = -0.0004; scene.add(sun);
+
+  windowsMat = [];
+  const box = new THREE.BoxGeometry(0.82, 1, 0.82); box.translate(0, 0.5, 0);
+  const tex = windowTexture();
+  buildings = DATA.map((f) => {
+    const win = tex.clone(); win.needsUpdate = true; win.repeat.set(1, Math.max(1, f.h / 1.2));
+    const mat = new THREE.MeshStandardMaterial({ color: KIND[f.kind], roughness: 0.75, metalness: 0.05, emissive: "#FFB36B",
+                                                 emissiveMap: win, emissiveIntensity: 0 });
+    windowsMat.push(mat);
+    const mesh = new THREE.Mesh(box, mat);
+    mesh.position.set(f.x, 0, f.z); mesh.castShadow = true; mesh.receiveShadow = true;
+    scene.add(mesh);
+    return mesh;
+  });
+
+  const target = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, target);
+  composer.addPass(new RenderPass(scene, camera));
+  bokeh = new BokehPass(scene, camera, { focus: 20, aperture: 0.0002, maxblur: 0.004 });
+  composer.addPass(bokeh);
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.55, 0.4, 0.86));
+  composer.addPass(new OutputPass());
+}
+
+function buildText() {
+  const panel = el(dom, "panel");
+  const kicker = el(dom, "abs kicker", "DATA", "kicker");
+  const title = el(dom, "abs title", undefined, "title");
+  const words = maskedWords(title, "This repository, as a city");
+  const caption = el(dom, "abs caption", `One building per tracked file; height grows with the square root of its lines. Snapshot ${DATA.snapshot}.`, "caption");
+  const labels = TALL.map((f, i) => ({ f, e: el(dom, "abs label", `${f.path.split("/").pop()} · ${f.lines.toLocaleString("en-US")} lines`, `label.${i}`), rule: el(dom, "rule") }));
+  const legend = LEGEND.map(([kind, text], i) => {
+    const e = el(dom, "abs key", `■ ${text}`, `legend.${i}`);
+    e.style.color = KIND[kind];
+    return e;
+  });
+  TEXT = { panel, kicker, title, words, caption, labels, legend };
+}
+
+const project = (v) => { const p = v.clone().project(camera); return [(p.x + 1) / 2 * W, (1 - p.y) / 2 * H, p.z]; };
+
+function seek(t) {
+  const u = t / T.duration;
+  DATA.forEach((f, i) => {
+    const grow = spring(t - C("rise") - f.delay, 0.6, 0.72);
+    buildings[i].scale.y = Math.max(0.001, f.h * grow);
+  });
+  const dusk = smooth((t - C("windows")) / 0.5);
+  windowsMat.forEach((m) => { m.emissiveIntensity = 0.06 + 1.6 * dusk; });
+  sun.intensity = lerp(3.2, 2.2, dusk);
+  // Crane: from street level between districts up and around to an overview.
+  const a = lerp(-1.05, 0.55, u), r = lerp(13, 21, u), y = lerp(1.6, 9.5, u * u * (3 - 2 * u) * 0.8 + 0.2 * u);
+  const hit = t >= C("overview") ? 0.04 * easeOut((t - C("overview")) / 0.3) : 0;
+  camera.position.set(Math.sin(a) * r * (1 - hit), y, Math.cos(a) * r * (1 - hit));
+  camera.lookAt(0, lerp(3.2, 1.4, ease(u)), 0);
+  camera.updateMatrixWorld();
+  bokeh.uniforms.focus.value = camera.position.length();
+  composer.render();
+
+  place(TEXT.panel, 40, 30, "l", smooth((t - C("title.in") + 0.3) / 0.3));
+  TEXT.panel.style.width = `${Math.max(TEXT.title.offsetWidth, TEXT.caption.offsetWidth) + 48}px`; TEXT.panel.style.height = "250px";
+  place(TEXT.kicker, 64, 52, "l", smooth((t - C("title.in") + 0.2) / 0.3));
+  place(TEXT.title, 64, 86, "l", 1); riseWords(TEXT.words, t, C("title.in"));
+  place(TEXT.caption, 64, 172, "l", smooth((t - C("caption.in")) / 0.4));
+  TEXT.labels.forEach(({ f, e, rule }, i) => {
+    const at = C(`label.${i}`), on = smooth((t - at) / 0.3);
+    const [px, py, pz] = project(new THREE.Vector3(f.x, buildings[DATA.indexOf(f)].scale.y + 0.1, f.z));
+    // Labels stand in a fixed column on the right; leader lines run to each roof.
+    const lx = W - 64, ly = 300 + 52 * i;
+    place(e, lx, ly, "r", on * (pz < 1 ? 1 : 0));
+    const x1 = lx - e.offsetWidth - 6, y1 = ly + 18, len = Math.hypot(x1 - px, y1 - py);
+    rule.style.width = `${(len * easeOut((t - at) / 0.4)).toFixed(2)}px`;
+    rule.style.transform = `translate(${px.toFixed(2)}px, ${py.toFixed(2)}px) rotate(${Math.atan2(y1 - py, x1 - px).toFixed(4)}rad)`;
+    rule.style.opacity = on.toFixed(3);
+  });
+  TEXT.legend.forEach((e, i) => place(e, 64 + 190 * i, H - 36 - 40, "l", smooth((t - C("caption.in") - 0.1 * i) / 0.3)));
+}
+
+vch.seek = seek;
+vch.ready = Promise.all([loadContract("/examples/three-city.json"), fetch("repo.json").then((r) => r.json())]).then(([loaded, repo]) => {
+  C = loaded.cue; T = { duration: loaded.contract.video.duration };
+  DATA = layout(repo.files); DATA.snapshot = repo.snapshot;
+  TALL = [...DATA].sort((a, b) => b.lines - a.lines).slice(0, 3);
+  build(); buildText();
+  if (!loaded.harness) preview(document.getElementById("stage"), W, H, T.duration, seek);
+});
+</script>
+</body>
+</html>

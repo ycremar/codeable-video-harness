@@ -82,6 +82,7 @@ class _Server:
     def __init__(self, *, spec: dict[str, Any], root: Path, folder: Path):
         self.missing: list[str] = []
         allowed = {a["path"] for a in spec.get("assets", [])}
+        folders = tuple(path for path in allowed if path.endswith("/"))
         contract = json.dumps(spec, ensure_ascii=False).encode()
         server = self
 
@@ -101,7 +102,7 @@ class _Server:
                         path = contained(root, route)
                         hidden = any(part.startswith(".") for part in Path(route).parts)
                         inside = path.is_relative_to(folder)
-                        if hidden or not path.is_file() or not (inside or route in allowed):
+                        if hidden or not path.is_file() or not (inside or route in allowed or route.startswith(folders)):
                             raise FileNotFoundError(route)
                         payload = path.read_bytes()
                         mime = EXTRA_TYPES.get(path.suffix.lower()) or mimetypes.guess_type(path.name)[0] or "application/octet-stream"
@@ -173,6 +174,8 @@ class HtmlRenderer:
         self.page = context.new_page()
         self.page.set_default_timeout(PAGE_TIMEOUT_MS)
         self.page.on("pageerror", lambda e: self.errors.append(str(e)))
+        # WebGL shader compile failures only reach the console; a frame drawn after one is silently wrong.
+        self.page.on("console", lambda m: self.errors.append(f"console.error: {m.text[:300]}") if m.type == "error" else None)
         self.page.goto(f"{self.server.origin}/{self.entry}", wait_until="load")
         self.page.add_style_tag(content=HIDE_CARET_CSS)
         self.cdp = context.new_cdp_session(self.page)

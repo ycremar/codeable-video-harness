@@ -123,6 +123,25 @@ Use it to ask why a candidate is sparser than a reference; it cannot say which i
 study, a deliberately minimal corpus film scored 0.018 edge density against the requested
 explainer's 0.088.
 
+## Style descriptors (`vch diversity`)
+
+`vch diversity` takes two or more videos or run folders. It samples decoded frames at 1 fps and
+reports these descriptors:
+
+- median brightness (luma, 0..1);
+- vivid share (saturation > 0.35 and value > 0.25);
+- dominant hue (12 bins centred on their names);
+- colourfulness;
+- palette size (4-bit colours covering at least 1% of the frame);
+- edge density.
+
+It then prints a pairwise style-distance matrix. Each scalar is scaled by its p10–p90 spread across
+511 corpus posters, and the hue distributions are compared too. Two random corpus posters are 1.34
+apart at the median (0.82 at p10, 2.02 at p90).
+
+Use it to check that variants differ, or that a set of films is not one house style. It measures
+spread, not quality, taste or brand fit, and it does not see layout, motion or sound.
+
 ## Production evidence additions
 
 All of these are explicitly proxies: `planned_scene_count` counts declared windows;

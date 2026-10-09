@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Refraction</title>
+<!--
+  Short three.js clip (contract: examples/three-prism.json). A glass prism with physical transmission and
+  dispersion splits a white beam into a spectrum; bloom and depth of field are post-processing passes.
+  Everything is set from t inside seek(t); geometry and seeded motes are built once at load.
+  Optics: red light bends least and exits highest; violet bends most.
+-->
+<style>
+  @font-face { font-family: "Inter"; src: url("/assets/fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
+  @font-face { font-family: "JBMono"; src: url("/assets/fonts/JetBrainsMono.ttf") format("truetype"); font-weight: 100 800; }
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  #stage { position: relative; width: 1280px; height: 720px; overflow: hidden; background: #040509; transform-origin: 0 0;
+           font-family: "Inter", sans-serif; color: #F2F4FA; }
+  canvas { position: absolute; left: 0; top: 0; }
+  .abs { position: absolute; left: 0; top: 0; white-space: nowrap; }
+  .kicker { font: 600 22px/1.2 "JBMono", monospace; letter-spacing: 0.24em; color: #C9D0E4; }
+  .title { font-weight: 700; font-size: 64px; line-height: 1.05; letter-spacing: -0.03em; }
+  .mask { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 0.05em 0.12em 0; margin-bottom: -0.12em; }
+  .word { display: inline-block; }
+  .caption { font-size: 24px; line-height: 1.4; color: #C3C9DA; white-space: normal; width: 420px; }
+  .label { font: 500 22px/1.2 "JBMono", monospace; padding: 4px 10px; background: rgba(4,5,9,0.78); border-radius: 6px; }
+</style>
+<script type="importmap">{ "imports": { "three": "/compositions/_vendor/three/build/three.module.js",
+                                         "three/addons/": "/compositions/_vendor/three/addons/" } }</script>
+</head>
+<body>
+<div id="stage"><canvas id="gl" width="1280" height="720"></canvas><div id="dom"></div></div>
+<script type="module">
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { BokehPass } from "three/addons/postprocessing/BokehPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { clamp, lerp, ease, easeOut, smooth, spring, windowed, seeded, loadContract, el, show, place, maskedWords, riseWords, preview } from "/compositions/_lib/clip.js";
+
+const W = 1280, H = 720;
+const vch = (window.__vch = window.__vch || {});
+// Spectrum from least to most deviated (top to bottom on the wall).
+const SPECTRUM = ["#FF2A2A", "#FF8A1F", "#FFE14A", "#38E06B", "#2FB8FF", "#4A5BFF", "#9B4DFF"];
+const ENTRY = new THREE.Vector3(-0.62, 0.18, 0), EXIT = new THREE.Vector3(0.58, 0.05, 0), WALL_X = 5.2;
+
+let renderer, composer, scene, camera, bokeh, beam, prism, glints, fan, wall, motes, moteSeeds, C, T;
+const dom = document.getElementById("dom");
+
+function build({ cue }) {
+  C = cue;
+  renderer = new THREE.WebGLRenderer({ canvas: document.getElementById("gl"), antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color("#040509");
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.35;
+  camera = new THREE.PerspectiveCamera(32, W / H, 0.1, 100);
+
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 40),
+    new THREE.MeshStandardMaterial({ color: "#030305", roughness: 0.28, metalness: 0.0, envMapIntensity: 0.04 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.y = -0.9; floor.receiveShadow = true; scene.add(floor);
+
+  wall = new THREE.Mesh(new THREE.PlaneGeometry(6, 5), new THREE.MeshStandardMaterial({ color: "#1A1D28", roughness: 0.95, envMapIntensity: 0.1 }));
+  wall.position.set(WALL_X + 0.02, 0.6, 0); wall.rotation.y = -Math.PI / 2; scene.add(wall);
+
+  // Equilateral prism, apex up, faces along the beam; physical glass with dispersion.
+  const shape = new THREE.Shape();
+  shape.moveTo(0, 0.95); shape.lineTo(-0.82, -0.47); shape.lineTo(0.82, -0.47); shape.closePath();
+  const geom = new THREE.ExtrudeGeometry(shape, { depth: 1.4, bevelEnabled: true, bevelSize: 0.02, bevelThickness: 0.02, bevelSegments: 2 });
+  geom.translate(0, 0, -0.7);
+  prism = new THREE.Mesh(geom, new THREE.MeshPhysicalMaterial({
+    color: "#FFFFFF", transmission: 1, thickness: 1.1, ior: 1.52, dispersion: 6, roughness: 0.02, metalness: 0,
+    specularIntensity: 1, envMapIntensity: 1.4, attenuationColor: "#E8F0FF", attenuationDistance: 6 }));
+  prism.castShadow = true; scene.add(prism);
+  const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geom, 30), new THREE.LineBasicMaterial({ color: "#DDE6FF", transparent: true, opacity: 0.35 }));
+  prism.add(edges);
+  glints = edges;
+
+  const key = new THREE.SpotLight("#FFFFFF", 22, 30, 0.22, 0.85); key.position.set(-1.5, 7, 2.5); key.castShadow = true;
+  key.target.position.set(0, -0.9, 0); scene.add(key.target);
+  key.shadow.mapSize.set(1024, 1024); scene.add(key);
+  scene.add(new THREE.HemisphereLight("#3A4466", "#020306", 0.25));
+
+  beam = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 1, 16, 1, true),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(2.0, 2.0, 2.0), toneMapped: false }));
+  scene.add(beam);
+
+  // One additive wedge per wavelength, from the exit point to the wall.
+  fan = SPECTRUM.map((hex, i) => {
+    const mat = new THREE.MeshBasicMaterial({ color: new THREE.Color(hex).multiplyScalar(1.6), transparent: true, opacity: 0,
+                                              blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, toneMapped: false });
+    const mesh = new THREE.Mesh(new THREE.BufferGeometry(), mat);
+    mesh.userData = { i };
+    scene.add(mesh);
+    return mesh;
+  });
+
+  // Dust motes in the beam: seeded once, positions are a pure function of t.
+  const rand = seeded(7);
+  moteSeeds = Array.from({ length: 220 }, () => ({ x: lerp(-6, 5, rand()), y: lerp(-0.25, 0.45, rand()), z: lerp(-0.6, 0.6, rand()),
+                                                   phase: rand() * Math.PI * 2, speed: lerp(0.05, 0.18, rand()), size: lerp(0.006, 0.016, rand()) }));
+  motes = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6),
+    new THREE.MeshBasicMaterial({ color: new THREE.Color(2.4, 2.4, 2.6), transparent: true, opacity: 0.9, toneMapped: false }), moteSeeds.length);
+  scene.add(motes);
+
+  const target = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, target);
+  composer.addPass(new RenderPass(scene, camera));
+  bokeh = new BokehPass(scene, camera, { focus: 7.5, aperture: 0.0012, maxblur: 0.008 });
+  composer.addPass(bokeh);
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.5, 0.35, 0.88));
+  composer.addPass(new OutputPass());
+}
+
+function setBeam(t) {
+  const start = new THREE.Vector3(-7, 0.45, 0), grow = ease((t - C("beam.on")) / (C("beam.hit") - C("beam.on")));
+  const end = start.clone().lerp(ENTRY, grow);
+  const len = Math.max(0.001, start.distanceTo(end));
+  beam.position.copy(start).add(end).multiplyScalar(0.5);
+  beam.scale.set(1, len, 1);
+  beam.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), end.clone().sub(start).normalize());
+  beam.visible = t >= C("beam.on");
+}
+
+function setFan(t) {
+  const open = ease((t - C("spectrum.open")) / 0.8), shimmer = 0.06 * Math.sin(t * 2.3);
+  fan.forEach((mesh) => {
+    const i = mesh.userData.i;                                          // red deviates least
+    const y0 = 0.62 - 0.165 * i + shimmer * 0.2, y1 = y0 - 0.12;
+    const reach = lerp(EXIT.x, WALL_X, open);
+    const pts = [EXIT.x, EXIT.y + 0.01 * (3 - i), 0, reach, lerp(EXIT.y, y0, open), -0.05, reach, lerp(EXIT.y, y1, open), 0.05];
+    mesh.geometry.setAttribute("position", new THREE.Float32BufferAttribute(pts, 3));
+    mesh.material.opacity = t < C("spectrum.open") ? 0 : 0.8 * smooth((t - C("spectrum.open")) / 0.4);
+  });
+}
+
+function setMotes(t) {
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), p = new THREE.Vector3();
+  moteSeeds.forEach((d, i) => {
+    const x = ((d.x + 6 + t * d.speed) % 11) - 6;
+    p.set(x, d.y + 0.06 * Math.sin(d.phase + t * 0.9), d.z + 0.05 * Math.cos(d.phase + t * 0.7));
+    const lit = x < ENTRY.x ? Math.exp(-((p.y - 0.42) ** 2 + p.z ** 2) / 0.02) * smooth((t - C("beam.on") - (x + 7) / 7) / 0.3) : 0.15;
+    s.setScalar(d.size * (0.4 + 1.6 * lit));
+    m.compose(p, q, s); motes.setMatrixAt(i, m);
+  });
+  motes.instanceMatrix.needsUpdate = true;
+}
+
+function setCamera(t) {
+  const u = t / T.duration, angle = lerp(-0.95, 0.62, u + 0.04 * Math.sin(u * Math.PI)), radius = lerp(9.6, 6.9, u);
+  camera.position.set(Math.sin(angle) * radius - 0.4, lerp(1.9, 1.35, u), Math.cos(angle) * radius);
+  camera.lookAt(0.9, 0.55, 0);
+  camera.updateMatrixWorld();
+  bokeh.uniforms.focus.value = camera.position.distanceTo(new THREE.Vector3(0, 0.1, 0));
+}
+
+// ---------- DOM text: kicker, title, caption, two labels anchored to the spectrum on the wall ----------
+let TEXT = null;
+function buildText() {
+  const kicker = el(dom, "abs kicker", "OPTICS", "kicker");
+  const title = el(dom, "abs title", undefined, "title");
+  const words = maskedWords(title, "Refraction");
+  const caption = el(dom, "abs caption", "White light enters the glass and leaves as a spectrum: each colour bends by a different angle.", "caption");
+  const red = el(dom, "abs label", "red bends least", "label.red"); red.style.color = "#FF8C8C";
+  const violet = el(dom, "abs label", "violet bends most", "label.violet"); violet.style.color = "#C7A3FF";
+  TEXT = { kicker, title, words, caption, red, violet };
+}
+function project(v) {
+  const p = v.clone().project(camera);
+  return [(p.x + 1) / 2 * W, (1 - p.y) / 2 * H];
+}
+function setText(t) {
+  const on = C("title.in");
+  place(TEXT.kicker, 64, 52, "l", smooth((t - on + 0.2) / 0.3));
+  place(TEXT.title, 64, 86, "l", 1); riseWords(TEXT.words, t, on);
+  place(TEXT.caption, 64, 170, "l", smooth((t - C("caption.in")) / 0.4));
+  // Labels sit just outside the outermost bands, three quarters of the way to the wall.
+  const x = lerp(EXIT.x, WALL_X, 0.72);
+  const [rx, ry] = project(new THREE.Vector3(x, lerp(EXIT.y, 0.62, 0.72) + 0.12, 0));
+  const [vx, vy] = project(new THREE.Vector3(x, lerp(EXIT.y, 0.62 - 0.165 * 6 - 0.12, 0.72) - 0.1, 0));
+  place(TEXT.red, clamp(rx, 64 + 200, W - 64), clamp(ry - 30, 40, H - 80), "r", smooth((t - C("label.red")) / 0.3));
+  place(TEXT.violet, clamp(vx, 64 + 230, W - 64), clamp(vy + 4, 40, H - 76), "r", smooth((t - C("label.violet")) / 0.3));
+}
+
+function seek(t) {
+  setCamera(t); setBeam(t); setFan(t); setMotes(t);
+  const hit = t >= C("beam.hit") ? Math.exp(-(t - C("beam.hit")) / 0.5) : 0;
+  glints.material.opacity = 0.35 + 0.6 * hit;
+  prism.rotation.set(0, 0, 0.0 * t);
+  composer.render();
+  setText(t);
+}
+
+vch.seek = seek;
+vch.ready = loadContract("/examples/three-prism.json").then((loaded) => {
+  T = { duration: loaded.contract.video.duration };
+  build(loaded); buildText();
+  if (!loaded.harness) preview(document.getElementById("stage"), W, H, T.duration, seek);
+});
+</script>
+</body>
+</html>

@@ -24,7 +24,9 @@ def writable(rel):
         return False
     if rel.parts[0] == 'scenes':
         return rel.suffix == '.py'
-    return rel.parts[0] == 'compositions' and len(rel.parts) > 2 and rel.suffix.lower() in COMPOSITION_TEXT_SUFFIXES
+    # compositions/_vendor/... holds unmodified third-party libraries; authors never edit them.
+    return (rel.parts[0] == 'compositions' and len(rel.parts) > 2 and not rel.parts[1].startswith('_')
+            and rel.suffix.lower() in COMPOSITION_TEXT_SUFFIXES)
 
 
 def frozen_check(spec, constraints):

@@ -161,6 +161,81 @@ dead-time proxy would read as motion. Generative enhancement of stills (for exam
 paid, generative step outside this harness. If you use one, declare it, keep its inputs and
 outputs, and leave a human review of what it changed.
 
+## Real 3D with three.js
+
+Six short clips (8 s, 720p) in `compositions/three-*` show physically lit 3D under the same checks as
+everything else:
+
+- **prism:** glass transmission and dispersion.
+- **studio:** softboxes and contact shadows.
+- **city:** this repository's files at sunset.
+- **orbit:** planet, atmosphere and station.
+- **pulse:** 720 instanced blocks driven by the cue sheet.
+- **paper:** extruded paper layers in parallax.
+
+Each has an `examples/three-<name>.json` contract.
+
+- **Libraries are vendored and declared once.** `compositions/_vendor/three/` holds unmodified
+  three r186 files, declared as one folder asset with its MIT licence. A path ending in `/` declares
+  a folder. An import map points `three` and `three/addons/` at it. `compositions/_lib/clip.js`
+  holds the shared pure-time helpers. Authors cannot write either folder (`_`-prefixed folders sit
+  outside the author write scope).
+- **Render inside `seek(t)`.** Set transforms from `t`, then call `composer.render()`. Never call
+  `setAnimationLoop`. Seeded geometry, textures and particles are built once in `ready`.
+- **Order matters inside a frame.** Pulse's first render failed the seek check because it set
+  `camera.up` *after* `lookAt`, so each frame used the previous frame's up vector.
+- **Shader errors fail the run.** WebGL reports compile failures only to the console, so a broken
+  material renders black without a page error. The backend treats `console.error` like a page error.
+- **Post-processing tone-maps the whole frame.** With `EffectComposer` and `OutputPass`, a
+  material's `toneMapped: false` does not exempt it. Author sky colours in linear light, and pick
+  Neutral tone mapping when colours must stay true.
+- **Calm scenes still need state changes.** Smooth, light scenes measured 0.1–0.3/255 per frame
+  under slow camera moves. Each clip makes its subject the change instead: lights switching on one
+  at a time, a practical light, the sun clearing a limb, push-ins on cues.
+- **Text over 3D needs its own backing.** Spectrum labels on bloom, a title overrunning its panel
+  and a kicker over a drifting cloud all failed contrast once. Give text over moving 3D a backing
+  sized from the text, or keep it off the busy side of the frame.
+- **Cost:** with SwiftShader, an 8-second clip renders and is fully checked in 50–140 s, including
+  4× MSAA, bloom, depth of field and soft shadows.
+
+## Style packs
+
+Style is an input, not something baked into a composition. A contract may carry `style`: an
+object, or a project-relative path to a JSON pack in `styles/`. The pack is inlined when the contract
+loads, so the run's `contract.json` records the exact tokens it used. Override it per run without
+editing the contract:
+
+```sh
+python -m vch run examples/how-code-becomes-video.json --style styles/paper-swiss.json --out runs/hc-paper-001 --trust-scene-code
+python -m vch diversity runs/hc-001 runs/hc-paper-001 runs/hc-terminal-001
+```
+
+A pack names colours by role and also sets type and finish:
+
+- **Colour roles:** five signal colours (`accent`, `second`, `third`, `fourth`, `alert`), text inks
+  (`ink`, `soft`, `dim`, `note`), and surfaces (`bg`, `sky`, `panel`, `well`, `lane`, `grid`, …).
+- **`type`:** display/text/mono families, which must be declared font assets, plus sizes, weights
+  and a wrap scale.
+- **`finish`:** bloom, fixed grain, fixed scanlines, vignette, glow, shadow and shading factors.
+- **`mode: light`** switches the blend modes. Additive light (bloom, beams) only works on dark
+  backgrounds.
+
+The harness validates `mode` and `#RRGGBB` values; everything else is the composition's contract
+with its packs. `compositions/how-code-becomes-video` reads every colour, family and finish from
+`contract.style`. It ships three original packs: `night-blueprint` (the default), `paper-swiss` and
+`phosphor-terminal`.
+
+What re-skinning taught:
+
+- **A colour that passes as a fill may fail as text.** Paper's first red measured 3.7:1 where the
+  vignette sat behind it. Text on fills picks whichever of the pack's two inks contrasts more.
+- **Font metrics change with the pack.** Give long labels a wrap width. One monospace label ran past
+  the safe area.
+- **Light styles need their own motion cues.** Glows that read on navy vanish on paper, so make
+  state changes geometric (a jump, a scale), not luminous.
+- **A pack changes the surface, not the structure.** Layout, camera, motion grammar and sound
+  carry as much of a style as colour does, and they are still authored per composition.
+
 ## Audio cues and bed
 
 - **Hit kinds:** `tick`, `impact`, `chime` and `whoosh`. A whoosh is a 0.42 s tonal riser that

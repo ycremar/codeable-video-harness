@@ -9,6 +9,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 from pathlib import Path
 from dataclasses import dataclass, field
 import numpy as np
@@ -18,6 +19,9 @@ BACKENDS = ("pillow", "pdoom", "html")
 AUDIO_MODES = ("none", "procedural", "file", "mix")
 HIT_KINDS = ("tick", "impact", "chime", "whoosh")
 MAX_HITS = 2000
+MAX_STYLE_BYTES = 64 * 1024
+STYLE_MODES = ("dark", "light")
+HEX_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
 # Files that carry third-party rights when they sit inside an HTML composition folder.
 COMPOSITION_MEDIA_SUFFIXES = {
     ".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif", ".bmp", ".ico",
@@ -137,9 +141,42 @@ def _validate_html(s, root):
             raise ValueError(f"Undeclared media in composition: {rel}; add source and license to assets")
 
 
+def _check_style_colors(value, where="style"):
+    if isinstance(value, dict):
+        for key, item in value.items():
+            _check_style_colors(item, f"{where}.{key}")
+    elif isinstance(value, list):
+        for i, item in enumerate(value):
+            _check_style_colors(item, f"{where}[{i}]")
+    elif isinstance(value, str) and value.startswith("#") and not HEX_COLOR.match(value):
+        raise ValueError(f"{where}: colours must be #RRGGBB")
+
+
+def resolve_style(style, root):
+    """A style pack (design tokens) as an object; a project-relative .json path is loaded and inlined.
+
+    Inlining puts the tokens into the run's contract.json, so the style a run used is part of its record.
+    """
+    if isinstance(style, str):
+        path = contained(root, style)
+        if path.suffix != ".json" or not path.is_file():
+            raise ValueError("style must be an object or a project-relative .json file")
+        if path.stat().st_size > MAX_STYLE_BYTES:
+            raise ValueError("Style pack too large")
+        style = {**json.loads(path.read_text()), "source": Path(style).as_posix()}
+    if not isinstance(style, dict):
+        raise ValueError("style must be a JSON object")
+    if style.get("mode", "dark") not in STYLE_MODES:
+        raise ValueError("style.mode must be dark or light")
+    _check_style_colors(style)
+    return style
+
+
 def validate(s, root):
     if s.get("version") != 1:
         raise ValueError("Unsupported contract version")
+    if "style" in s:
+        s["style"] = resolve_style(s["style"], root)
     backend = s.get('backend', 'pillow')
     if backend not in BACKENDS:
         raise ValueError('Unknown renderer backend')
@@ -198,7 +235,12 @@ def validate(s, root):
     for asset in s.get("assets", []):
         if not asset.get("license") or not asset.get("source"):
             raise ValueError("Every asset needs source and license/rights provenance")
-        if not contained(root, asset["path"]).is_file():
+        # A path ending in "/" declares a whole folder (a vendored library) under one licence record.
+        folder = asset["path"].endswith("/")
+        if any(part.startswith(".") for part in Path(asset["path"]).parts):
+            raise ValueError(f"Hidden asset paths are never served: {asset['path']}")
+        target = contained(root, asset["path"])
+        if not (target.is_dir() if folder else target.is_file()):
             raise ValueError(f"Missing asset: {asset['path']}")
     _validate_audio(s.get("audio", {"mode": "none"}), s.get("assets", []), v["duration"])
     timing = s.get("timing", {})

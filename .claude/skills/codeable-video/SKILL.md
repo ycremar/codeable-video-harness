@@ -17,25 +17,30 @@ show), `docs/OPUS_VIDEO_RESEARCH.md` (how public code-rendered videos are made).
    `timing.hits` for every moment that needs a sound. For a licensed song:
    `python -m vch profile song.wav --out runs/song-profile`, then read tempo, phase and onsets from
    `profile.json`.
-3. **Build** `compositions/<name>/index.html` (or `scenes/*.py`):
+3. **Style is an input.** Put tokens in `styles/<pack>.json` (roles, not hues) and reference them as
+   `contract.style`, or pass `--style` to `vch run` / `vch stills`. For variants, render each pack and
+   check `vch diversity` (corpus median pair distance 1.34). Every pack must pass the same checks.
+4. **Build** `compositions/<name>/index.html` (or `scenes/*.py`):
    - `window.__vch.seek(t)` sets every property from `t`; nothing carries over between frames.
    - Use closed-form springs, and snap them when settled.
    - Outgoing text leaves before incoming text arrives. Masks start fully hidden.
    - Wipes take ≥0.3 s; labels fade across them.
    - Fonts and media stay local and are declared with rights.
+   - For real 3D, start from a `compositions/three-*` clip: three.js is vendored, and
+     `compositions/_lib/clip.js` has the pure-time helpers.
    - Mark semantic lines with `data-vch-id`.
-4. **Preview cheaply.** `python -m vch stills <contract> --beats --out runs/<name>-stills-NNN --trust-scene-code`.
+5. **Preview cheaply.** `python -m vch stills <contract> --beats --out runs/<name>-stills-NNN --trust-scene-code`.
    Open `sheet.jpg` and actually look. Fix the warnings in `stills.json` before rendering. Add
    `--motion` to check that holds keep moving (next-frame change ≥ 0.5).
    - If the brief points at a reference ("as rich as this"), profile both:
      `vch profile <file> --out <dir>`, then `vch profile-compare a/profile.json b/profile.json`.
    - Don't edit project files while `vch run` renders. The source check invalidates the run.
-5. **Render + measure.** `python -m vch run <contract> --out runs/<name>-NNN --trust-scene-code`.
+6. **Render + measure.** `python -m vch run <contract> --out runs/<name>-NNN --trust-scene-code`.
    - Read `report.md`.
    - Inspect `contact-sheet.jpg` and `frames/` (decoded from the MP4).
    - Watch and listen if you can; otherwise say you could not.
    - Exit 3 means machine checks passed and human review is pending.
-6. **Repair** named failures only, up to 3 attempts, each into a new run folder. Never edit
+7. **Repair** named failures only, up to 3 attempts, each into a new run folder. Never edit
    thresholds, `vch/evaluate.py` or tests to make a candidate pass.
 
 | Failure | Usual cause → fix |
@@ -47,12 +52,15 @@ show), `docs/OPUS_VIDEO_RESEARCH.md` (how public code-rendered videos are made).
 | DEAD-TIME | A settled layout holds too long → add motion or a beat, or exclude a deliberate end hold |
 | HITS | A cue without a sound, or a sound placed by its file start → declared hits; align layers by `peak` |
 | Loudness | Transient-only audio cannot reach the target under the ceiling → lower the target or supply a mastered, licensed bed |
-| "non-local resources" | CDN font or library → vendor it with a licence record |
+| "non-local resources" | CDN font or library → vendor it under `compositions/_vendor/<lib>/` and declare the folder (path ending `/`) with its licence |
+| `console.error` blocks the run | Usually a WebGL shader compile error; the frame would have rendered black |
+| 3D clip fails SEEK | Per-frame state set after it is used (e.g. `camera.up` after `lookAt`), or an animation loop instead of `seek(t)` |
 | CONTRAST on a label that looked fine | The label never settled: it appeared within ~1 s of its panel leaving, or artwork flew behind it → give it time, re-route the artwork |
 | SAFE during an entrance | An underdamped spring overshot the margin → ease-out for entrances that start at a margin |
 | DEAD-TIME inside a busy-looking station | Small labels change only ~0.1/255 of the frame → camera push-ins on cues, or bigger moving elements; never animated grain |
+| A pack fails CONTRAST/SAFE the default passed | Fill colour reused as text, or a wider font → darker text role, wrap widths |
 | Sparse next to a reference | Fewer edges / grid cells in `profile-compare` → kicker + headline + description + a working mechanism per beat, persistent HUD, real data |
 
-7. **Report** the commands actually run, artifact paths, the failing and unmeasured requirement
+8. **Report** the commands actually run, artifact paths, the failing and unmeasured requirement
    IDs, and that human reviews stay pending until the named reviewer decides. Never approve a human
    criterion yourself.
