@@ -219,6 +219,7 @@ function buildLane(i, netTex, curtainTex) {
     ring.rotation.x = -Math.PI / 2; ring.position.set(cx + dx, 0.006, dz); group.add(ring);
     const fill = new THREE.Mesh(new THREE.CircleGeometry(0.56, 64), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     fill.rotation.x = -Math.PI / 2; fill.position.set(cx + dx, 0.005, dz); group.add(fill);
+    ring.renderOrder = fill.renderOrder = 1;
     return { ring, fill };
   });
   targetMeshes.push(tg);
@@ -284,7 +285,13 @@ function buildInstances() {
   inst.ring = new THREE.InstancedMesh(new THREE.RingGeometry(0.9, 1.0, 48), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), N + 1);
   inst.TRAIL = TRAIL;
   for (const k of ["trail", "mark", "ring"]) for (let i = 0; i < inst[k].count; i++) inst[k].setColorAt(i, new THREE.Color(0, 0, 0));
-  for (const k of ["ball", "trail", "shadow", "mark", "ring"]) { inst[k].frustumCulled = false; scene.add(inst[k]); }
+  // InstancedMesh computes its sort sphere lazily from the instances of the first frame it draws, which
+  // would make transparent draw order depend on seek history: pin the sphere and order the layers.
+  const ORDER = { ball: 0, shadow: 2, mark: 3, ring: 4, trail: 5 };
+  for (const k of Object.keys(ORDER)) {
+    inst[k].frustumCulled = false; inst[k].boundingSphere = new THREE.Sphere(new THREE.Vector3(5, 0, 0), 200);
+    inst[k].renderOrder = ORDER[k]; scene.add(inst[k]);
+  }
 }
 
 function build() {
@@ -537,8 +544,8 @@ function buildText() {
   TX.word = el(card, "word-mark", "A Tennis Lab", "close.word"); TX.word.style.fontSize = `${L.mark}px`;
   TX.sub = el(card, "sub", "Indoor tennis training · Seattle", "close.sub");
   TX.soon = el(card, "soon", "Opening soon", "close.soon");
-  TX.cta = el(card, "cta", undefined, "close.cta");
-  TX.sheen = el(TX.cta, "sheen"); TX.ctaText = el(TX.cta, "cta-text", "Join the waitlist");
+  TX.cta = el(card, "cta");
+  TX.sheen = el(TX.cta, "sheen"); TX.ctaText = el(TX.cta, "cta-text", "Join the waitlist", "close.cta");
   TX.curl = el(card, "url", "atennislab.com", "close.url");
   TX.cardScrim = document.getElementById("card-scrim");
   TX.cardScrim.style.background = "radial-gradient(ellipse at 50% 50%, rgba(7,8,10,0.52) 0%, rgba(7,8,10,0.66) 60%, rgba(7,8,10,0.86) 100%)";
@@ -558,7 +565,9 @@ function textAt(t) {
   TX.blocks.forEach(({ s, block, kicker, head, words, caption, chips, zh, legend }) => {
     const at = C(s.cue), out = 1 - smooth((t - (s.end - 0.5)) / 0.32);
     const live = t >= at - 0.3 && out > 0.002;
-    block.style.visibility = live ? "visible" : "hidden";
+    // display:none, not visibility: children set visible by an earlier seek would otherwise override a
+    // hidden parent and stay composited, which shifts the scrim's raster by a level on later frames.
+    block.style.display = live ? "flex" : "none";
     block.style.opacity = out.toFixed(3);
     if (!live) return;
     rise(kicker, t, at - 0.2, 14);
@@ -576,7 +585,7 @@ function textAt(t) {
     const vis = smooth((t - on) / 0.3) * (1 - smooth((t - 11.15) / 0.3));
     const [x, y] = project(anchors[k]);
     const lw = 170, m = (P ? 72 : 96) + lw / 2;
-    const inside = Math.min(smooth((x - m + 40) / 40), smooth((W - m + 40 - x) / 40));
+    const inside = Math.min(smooth((x + 20) / 60), smooth((W + 20 - x) / 60));
     place(e, clamp(x, m, W - m), clamp(y + (k < 4 ? 16 : -70), 80, L.hudY - 90), "c", vis * inside);
   });
   // HUD: chapter rail + progress bar + url; leave before the closing card.
