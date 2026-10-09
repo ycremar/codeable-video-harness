@@ -1,0 +1,635 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A Tennis Lab</title>
+<!--
+  Pre-opening promo for A Tennis Lab (contracts: examples/atl-promo.json, examples/atl-promo-vertical.json).
+  One continuous three.js world: a dark indoor studio with four half-court training lanes and The Wall.
+  Ball machines feed balls along closed-form arcs into floor targets; landing marks are a pure function of
+  t; last session's marks stay while this session continues; the focus lane then opens into a full match
+  court and the last practice ball is played across the net. Layout adapts to landscape or portrait.
+-->
+<style>
+  @font-face { font-family: "Inter"; src: url("/assets/fonts/Inter.ttf") format("truetype"); font-weight: 100 900; }
+  @font-face { font-family: "JBMono"; src: url("/assets/fonts/JetBrainsMono.ttf") format("truetype"); font-weight: 100 800; }
+  @font-face { font-family: "NotoSC"; src: url("/assets/fonts/NotoSerifSC.ttf") format("truetype"); }
+  html, body { margin: 0; background: #000; overflow: hidden; }
+  #stage { position: relative; overflow: hidden; background: #07080A; transform-origin: 0 0;
+           font-family: "Inter", sans-serif; color: #F3F1EC; }
+  canvas { position: absolute; left: 0; top: 0; }
+  .layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }
+  /* Own compositing layers: without them, rasterising text mid-fade alters later rasters of the same text (breaks seek determinism). */
+  #dom, #card, #scrim, #card-scrim { will-change: transform; }
+  .abs { position: absolute; left: 0; top: 0; white-space: nowrap; }
+  .block { position: absolute; display: flex; flex-direction: column; align-items: flex-start; }
+  .kicker { font: 600 26px/1.2 "JBMono", monospace; letter-spacing: 0.22em; color: #D9F23E; margin-bottom: 22px; }
+  .head { font-weight: 800; letter-spacing: -0.035em; line-height: 1.02; white-space: normal; }
+  .mask { display: inline-block; overflow: hidden; vertical-align: top; padding: 0 0.06em 0.14em 0; margin-bottom: -0.14em; }
+  .word { display: inline-block; }
+  .caption { font-size: 38px; line-height: 1.32; color: #C9CDD3; margin-top: 26px; white-space: normal; }
+  .chip { display: flex; align-items: center; gap: 16px; font: 500 28px/1.2 "Inter", sans-serif; color: #F3F1EC; margin-top: 18px; }
+  .chip .dot { width: 12px; height: 12px; border-radius: 50%; background: #D9F23E; flex: none; }
+  .zh { font-family: "NotoSC", serif; font-size: 60px; line-height: 1.3; letter-spacing: 0.12em; color: #F3F1EC; margin-top: 26px; }
+  .legend { font: 500 26px/1.3 "JBMono", monospace; letter-spacing: 0.08em; margin-top: 16px; }
+  .label { font: 600 24px/1.2 "JBMono", monospace; letter-spacing: 0.14em; color: #F3F1EC; background: rgba(9,10,12,0.9);
+           padding: 8px 14px; border-radius: 4px; }
+  .hud { font: 500 24px/1.2 "JBMono", monospace; letter-spacing: 0.12em; color: #AEB4BC; }
+  .bar { position: absolute; left: 0; top: 0; height: 3px; background: #D9F23E; transform-origin: 0 50%; }
+  .track { position: absolute; left: 0; top: 0; height: 3px; background: #2A2E34; }
+  .scrim { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+  .card { position: absolute; left: 0; top: 0; width: 100%; display: flex; flex-direction: column; align-items: center; }
+  .word-mark { font-weight: 750; letter-spacing: -0.045em; line-height: 1; }
+  .sub { font-size: 36px; color: #C9CDD3; margin-top: 30px; }
+  .soon { font: 600 28px/1.2 "JBMono", monospace; letter-spacing: 0.22em; color: #D9F23E; margin-top: 54px; }
+  .cta { position: relative; overflow: hidden; font-weight: 700; font-size: 38px; color: #0B0D10; background: #D9F23E;
+         padding: 22px 52px; border-radius: 999px; margin-top: 30px; }
+  .sheen { position: absolute; top: 0; left: 0; width: 160px; height: 100%;
+           background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,0.55), rgba(255,255,255,0)); }
+  .cta-text { position: relative; }
+  .url { font: 500 40px/1.2 "JBMono", monospace; letter-spacing: 0.04em; color: #F3F1EC; margin-top: 34px; }
+  .rule { width: 120px; height: 3px; background: #D9F23E; margin-bottom: 44px; transform-origin: 50% 50%; }
+</style>
+<script type="importmap">{ "imports": { "three": "/compositions/_vendor/three/build/three.module.js",
+                                         "three/addons/": "/compositions/_vendor/three/addons/" } }</script>
+</head>
+<body>
+<div id="stage"><canvas id="gl"></canvas><div id="scrim" class="layer"></div><div id="dom" class="layer"></div><div id="card-scrim" class="scrim"></div><div id="card" class="layer"></div></div>
+<script type="module">
+import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
+import { RectAreaLightUniformsLib } from "three/addons/lights/RectAreaLightUniformsLib.js";
+import { clamp, lerp, ease, easeOut, smooth, spring, hash, loadContract, el, show, place, maskedWords, riseWords, preview } from "/compositions/_lib/clip.js";
+
+const vch = (window.__vch = window.__vch || {});
+let W, H, P, C, T, renderer, composer, scene, camera;
+const dom = document.getElementById("dom"), cardLayer = document.getElementById("card");
+
+// ---------------------------------------------------------------- world constants (metres)
+const LANES = [-15, -5, 5, 15], FOCUS = 1, LX = LANES[FOCUS];
+const HALF = 11.885, SINGLE = 4.115, DOUBLE = 5.485, SERVICE = 6.40, NET_W = 9.6;
+const WALL_X = 26;
+const TARGETS = [[-2.6, 10.3], [2.6, 10.3], [-0.2, 7.4]];
+const MACHINE = (i) => new THREE.Vector3(LANES[i], 1.05, -1.6);
+const COL = { bg: "#07080A", floor: "#0C0E11", runoff: "#15283A", court: "#1F3E58", line: "#E6E9EC", ball: "#D9F23E",
+              curtain: "#22262D", machine: "#2A2E35", wall: "#262B32" };
+const YELLOW = new THREE.Color(COL.ball);
+
+// ---------------------------------------------------------------- balls: closed-form arcs from the cue sheet
+// A ball is a list of parabolic segments {t0, t1, p0, p1, h}. Position is evaluated from t only.
+let BALLS = [];
+const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
+function landing(lane, target, spread, key) {
+  const [dx, dz] = TARGETS[target], r = spread * Math.sqrt(hash(key * 7 + 1)), a = 2 * Math.PI * hash(key * 13 + 5);
+  return v3(LANES[lane] + dx + r * Math.cos(a), 0, dz + r * Math.sin(a));
+}
+function bounceTail(segs, p, from, t, dir, scale = 1) {
+  const d = dir.clone().setY(0).normalize();
+  const p2 = p.clone().addScaledVector(d, 2.0 * scale), p3 = p2.clone().addScaledVector(d, 0.9 * scale);
+  segs.push({ t0: t, t1: t + 0.42, p0: p.clone(), p1: p2, h: 0.5 * scale });
+  segs.push({ t0: t + 0.42, t1: t + 0.66, p0: p2, p1: p3, h: 0.16 * scale });
+  return t + 0.66;
+}
+function feed(name, lane, target, spread, session, key, tail = true, at = null) {
+  const land = at ?? C(`${name}.land`), launch = land - 0.8, p0 = MACHINE(lane), p1 = landing(lane, target, spread, key);
+  const segs = [{ t0: launch, t1: land, p0, p1, h: 1.15 }];
+  const end = tail ? bounceTail(segs, p1, p0, land, p1.clone().sub(p0)) : land;
+  return { name, lane, target, session, segs, land, launch, mark: p1, end };
+}
+function buildBalls() {
+  const B = [];
+  B.push(feed("b0", FOCUS, 0, 0.55, 1, 1), feed("b1", FOCUS, 1, 0.55, 1, 2));
+  [1, 0, 1, 0].forEach((tg, i) => B.push(feed(`l${i}`, i, tg, 0.5, 1, 10 + i)));
+  // During the reveal every lane keeps running its drill; only each lane's first ball carries a cue sound.
+  [0, 1, 2, 3].forEach((i) => [1.15, 2.3].forEach((dt, j) =>
+    B.push(feed(`l${i}x${j}`, i, (i + j + 1) % 3, 0.5, 1, 50 + 3 * i + j, true, C(`l${i}.land`) + dt))));
+  [0, 1, 2, 0, 1].forEach((tg, i) => B.push(feed(`r${i}`, FOCUS, tg, 0.62, 1, 20 + i)));
+  [0, 1, 2, 1].forEach((tg, i) => B.push(feed(`s${i}`, FOCUS, tg, 0.22, 2, 30 + i)));
+  // The Wall: a rally ball off the wall and back to the floor.
+  { const hit = C("wall.hit"), bnc = C("wall.bounce");
+    const a = v3(WALL_X - 1.2, 1.0, 7.6), b = v3(WALL_X + 0.4, 1.55, -0.95), c = v3(WALL_X + 1.1, 0, 4.4);
+    const segs = [{ t0: hit - 0.6, t1: hit, p0: a, p1: b, h: 0.55 }, { t0: hit, t1: bnc, p0: b, p1: c, h: 0.7 }];
+    const end = bounceTail(segs, c, b, bnc, c.clone().sub(b));
+    B.push({ name: "wall", lane: 4, target: -1, session: 1, segs, land: bnc, launch: hit - 0.6, mark: null, end }); }
+  // Match: the last practice ball lands in its target, is played back across the net into the far court.
+  { const m = feed("m", FOCUS, 0, 0.1, 2, 40, false);
+    const hitT = C("m.hit"), farT = C("m.far");
+    const hp = v3(LX - 2.9, 0.95, 11.7), far = v3(LX + 3.1, 0, -10.2);
+    m.segs.push({ t0: m.land, t1: hitT, p0: m.mark, p1: hp, h: 0.35 });
+    m.segs.push({ t0: hitT, t1: farT, p0: hp, p1: far, h: 2.1 });
+    m.end = bounceTail(m.segs, far, hp, farT, far.clone().sub(hp), 1.4);
+    m.far = far; m.farT = farT; B.push(m); }
+  // A quiet match rally continues on the full court and behind the closing card (no sound).
+  { const pts = [v3(LX + 3.1, 0.9, -12.2), v3(LX - 2.4, 0, 9.6), v3(LX - 2.6, 0.95, 11.6), v3(LX + 2.2, 0, -9.4),
+                 v3(LX + 2.5, 0.95, -11.8), v3(LX - 1.6, 0, 8.8), v3(LX - 1.9, 0.95, 11.4), v3(LX - 3.0, 0, -8.6),
+                 v3(LX - 3.2, 0.95, -11.4), v3(LX + 2.8, 0, 9.2)];
+    const t0 = 25.7;
+    const segs = [];
+    for (let k = 0; k < 5; k++) {
+      const ta = t0 + k * 1.25;
+      segs.push({ t0: ta, t1: ta + 0.85, p0: pts[2 * k], p1: pts[2 * k + 1], h: 1.9 });
+      segs.push({ t0: ta + 0.85, t1: ta + 1.25, p0: pts[2 * k + 1], p1: k < 4 ? pts[2 * k + 2] : pts[2 * k + 1].clone().add(v3(0, 0, 2)), h: 0.55 });
+    }
+    B.push({ name: "rally", lane: FOCUS, target: -1, session: 3, segs, land: t0 + 1.05, launch: t0, mark: null, end: segs.at(-1).t1 }); }
+  return B;
+}
+function ballPos(b, t, out) {
+  for (const s of b.segs) if (t < s.t1) {
+    const u = clamp((t - s.t0) / (s.t1 - s.t0));
+    out.lerpVectors(s.p0, s.p1, u); out.y += 4 * s.h * u * (1 - u); return out;
+  }
+  return out.copy(b.segs.at(-1).p1);
+}
+
+// ---------------------------------------------------------------- textures (built once, deterministic)
+function gridTexture(cells, line, alpha) {
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d"); g.fillStyle = "#000"; g.fillRect(0, 0, 128, 128);
+  g.strokeStyle = `rgba(255,255,255,${alpha})`; g.lineWidth = line;
+  const s = 128 / cells;
+  for (let k = 0; k <= cells; k++) { g.beginPath(); g.moveTo(k * s, 0); g.lineTo(k * s, 128); g.stroke(); g.beginPath(); g.moveTo(0, k * s); g.lineTo(128, k * s); g.stroke(); }
+  const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.colorSpace = THREE.NoColorSpace;
+  return tex;
+}
+
+// ---------------------------------------------------------------- scene graph
+const lanes = [], mats = { far: [], others: [], wall: [] };
+let farGroup, wallBay, match, lights = {}, inst = {}, targetMeshes = [], curtains = [], fixtures = [], nets = [], machines = [];
+
+function stdMat(color, extra = {}) { return new THREE.MeshStandardMaterial({ color, roughness: 0.82, metalness: 0, ...extra }); }
+function lineBox(group, mat, x0, z0, x1, z1, w = 0.05) {
+  const dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz) + w;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(dx === 0 ? w : len, dz === 0 ? w : len), mat);
+  m.rotation.x = -Math.PI / 2; m.position.set((x0 + x1) / 2, 0.004, (z0 + z1) / 2); group.add(m); return m;
+}
+function halfCourtLines(group, mat, cx, sign, doubles) {
+  const z = (v) => sign * v;
+  const sw = doubles ? DOUBLE : SINGLE;
+  lineBox(group, mat, cx - sw, z(HALF), cx + sw, z(HALF), 0.07);
+  lineBox(group, mat, cx - SINGLE, z(0), cx - SINGLE, z(HALF));
+  lineBox(group, mat, cx + SINGLE, z(0), cx + SINGLE, z(HALF));
+  if (doubles) { lineBox(group, mat, cx - DOUBLE, z(0), cx - DOUBLE, z(HALF)); lineBox(group, mat, cx + DOUBLE, z(0), cx + DOUBLE, z(HALF)); }
+  lineBox(group, mat, cx - SINGLE, z(SERVICE), cx + SINGLE, z(SERVICE));
+  lineBox(group, mat, cx, z(0), cx, z(SERVICE));
+  lineBox(group, mat, cx, z(HALF - 0.12), cx, z(HALF));
+}
+function buildNet(cx, mat, netTex) {
+  const g = new THREE.Group(); g.position.set(cx, 0, 0);
+  const net = new THREE.Mesh(new THREE.PlaneGeometry(NET_W, 0.88), new THREE.MeshStandardMaterial({ color: "#111317", alphaMap: netTex, transparent: true, side: THREE.DoubleSide, roughness: 1 }));
+  netTex.repeat.set(NET_W * 8, 7); net.position.y = 0.46; g.add(net);
+  const tape = new THREE.Mesh(new THREE.BoxGeometry(NET_W, 0.06, 0.03), stdMat(COL.line, { roughness: 0.6 })); tape.position.y = 0.93; g.add(tape);
+  for (const s of [-1, 1]) {
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.045, 1.07, 16), stdMat("#30343B", { metalness: 0.7, roughness: 0.35 }));
+    post.position.set(s * NET_W / 2, 0.535, 0); post.userData.side = s; g.add(post);
+  }
+  return g;
+}
+function buildMachine(i) {
+  const g = new THREE.Group(); const p = MACHINE(i); g.position.set(p.x, 0, p.z - 0.25);
+  const body = new THREE.Mesh(new RoundedBoxGeometry(0.62, 0.5, 0.78, 4, 0.08), stdMat(COL.machine, { metalness: 0.55, roughness: 0.38 }));
+  body.position.y = 0.42; g.add(body);
+  const hopper = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.24, 0.42, 32, 1, true), stdMat("#3A3F47", { metalness: 0.3, roughness: 0.5, side: THREE.DoubleSide }));
+  hopper.position.y = 0.88; g.add(hopper);
+  const nozzle = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.08, 0.34, 20), stdMat("#16181C", { metalness: 0.6, roughness: 0.3 }));
+  nozzle.rotation.x = Math.PI / 2 - 0.25; nozzle.position.set(0, 0.86, 0.42); g.add(nozzle);
+  for (const s of [-1, 1]) {
+    const wheel = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.06, 20), stdMat("#101114"));
+    wheel.rotation.z = Math.PI / 2; wheel.position.set(s * 0.34, 0.11, -0.22); g.add(wheel);
+  }
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 0.01), new THREE.MeshBasicMaterial({ color: YELLOW.clone() }));
+  led.position.set(0, 0.5, 0.395); g.add(led); g.userData.led = led;
+  return g;
+}
+function buildLane(i, netTex, curtainTex) {
+  const cx = LANES[i], group = new THREE.Group(), own = [];
+  const run = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 16.4), stdMat(COL.runoff)); run.rotation.x = -Math.PI / 2; run.position.set(cx, 0.001, 5.4); group.add(run); own.push(run.material);
+  group.userData.run = run;
+  const court = new THREE.Mesh(new THREE.PlaneGeometry(SINGLE * 2, HALF), stdMat(COL.court)); court.rotation.x = -Math.PI / 2; court.position.set(cx, 0.002, HALF / 2); group.add(court); own.push(court.material);
+  const lm = stdMat(COL.line, { roughness: 0.55, emissive: COL.line, emissiveIntensity: 0.08 }); own.push(lm);
+  halfCourtLines(group, lm, cx, 1, false);
+  const net = buildNet(cx, lm, netTex.clone()); group.add(net); nets.push(net);
+  net.traverse((o) => o.material && own.push(o.material));
+  const machine = buildMachine(i); group.add(machine); machines.push(machine);
+  machine.traverse((o) => o.material && own.push(o.material));
+  const tg = TARGETS.map(([dx, dz]) => {
+    const ring = new THREE.Mesh(new THREE.RingGeometry(0.56, 0.64, 64), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, depthWrite: false }));
+    ring.rotation.x = -Math.PI / 2; ring.position.set(cx + dx, 0.006, dz); group.add(ring);
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(0.56, 64), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
+    fill.rotation.x = -Math.PI / 2; fill.position.set(cx + dx, 0.005, dz); group.add(fill);
+    ring.renderOrder = fill.renderOrder = 1;
+    return { ring, fill };
+  });
+  targetMeshes.push(tg);
+  scene.add(group);
+  lanes.push({ group, own, cx });
+  if (i !== FOCUS) mats.others.push(...own);
+}
+function buildCurtain(x, curtainTex) {
+  const h = 4.4, tex = curtainTex.clone(); tex.repeat.set(17 * 3, h * 3);
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(17, h), new THREE.MeshStandardMaterial({ color: COL.curtain, alphaMap: tex, transparent: true, side: THREE.DoubleSide, roughness: 1, opacity: 0.95 }));
+  m.rotation.y = Math.PI / 2; m.position.set(x, h / 2, 5.6); m.userData.h = h; scene.add(m); curtains.push(m);
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 17), stdMat("#2E3239", { metalness: 0.6, roughness: 0.4 })); rail.position.set(x, h, 5.6); scene.add(rail); m.userData.rail = rail;
+}
+function buildFixtures(cx, z0, len, key) {
+  const mat = new THREE.MeshBasicMaterial({ color: "#ffffff" }), bars = [];
+  for (const s of [-1, 1]) {
+    const bar = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.05, len), mat); bar.position.set(cx + s * 2.4, 7.6, z0 + len / 2); scene.add(bar); bars.push(bar);
+  }
+  const light = new THREE.RectAreaLight("#FFF6EA", 0, 6, len); light.position.set(cx, 7.5, z0 + len / 2); light.lookAt(cx, 0, z0 + len / 2); scene.add(light);
+  fixtures.push({ key, mat, light, bars });
+}
+function buildWallBay(netTex) {
+  wallBay = new THREE.Group();
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 15.4), stdMat(COL.runoff)); floor.rotation.x = -Math.PI / 2; floor.position.set(WALL_X, 0.001, 6.2); wallBay.add(floor);
+  const wall = new THREE.Mesh(new THREE.BoxGeometry(8.4, 4.2, 0.4), stdMat(COL.wall, { roughness: 0.9 })); wall.position.set(WALL_X, 2.1, -1.35); wallBay.add(wall);
+  const lm = stdMat(COL.line, { roughness: 0.55, emissive: COL.line, emissiveIntensity: 0.08 });
+  const band = new THREE.Mesh(new THREE.BoxGeometry(8.4, 0.06, 0.02), lm); band.position.set(WALL_X, 0.914, -1.14); wallBay.add(band);
+  for (const z of [5.0, 11.0]) lineBox(wallBay, lm, WALL_X - 4.1, z, WALL_X + 4.1, z);
+  lineBox(wallBay, lm, WALL_X, -1.1, WALL_X, 5.0);
+  wallBay.traverse((o) => o.material && !mats.wall.includes(o.material) && mats.wall.push(o.material));
+  scene.add(wallBay);
+}
+function buildFar() {
+  farGroup = new THREE.Group();
+  const run = new THREE.Mesh(new THREE.PlaneGeometry(16, HALF + 5), stdMat(COL.runoff, { transparent: true })); run.rotation.x = -Math.PI / 2; run.position.set(LX, 0.0005, -(HALF + 5) / 2); farGroup.add(run);
+  const court = new THREE.Mesh(new THREE.PlaneGeometry(DOUBLE * 2, HALF), stdMat(COL.court, { transparent: true })); court.rotation.x = -Math.PI / 2; court.position.set(LX, 0.0025, -HALF / 2); farGroup.add(court);
+  for (const s of [-1, 1]) {
+    const alley = new THREE.Mesh(new THREE.PlaneGeometry(DOUBLE - SINGLE, HALF), stdMat(COL.court, { transparent: true }));
+    alley.rotation.x = -Math.PI / 2; alley.position.set(LX + s * (SINGLE + DOUBLE) / 2, 0.0025, HALF / 2); farGroup.add(alley);
+  }
+  const nearRun = new THREE.Mesh(new THREE.PlaneGeometry(16, 5), stdMat(COL.runoff, { transparent: true })); nearRun.rotation.x = -Math.PI / 2; nearRun.position.set(LX, 0.0005, HALF + 2.0); farGroup.add(nearRun);
+  const lm = stdMat(COL.line, { roughness: 0.55, emissive: COL.line, emissiveIntensity: 0.08, transparent: true });
+  halfCourtLines(farGroup, lm, LX, -1, true);
+  lineBox(farGroup, lm, LX - DOUBLE, HALF, LX + DOUBLE, HALF, 0.07);
+  lineBox(farGroup, lm, LX - DOUBLE, 0, LX - DOUBLE, HALF); lineBox(farGroup, lm, LX + DOUBLE, 0, LX + DOUBLE, HALF);
+  farGroup.traverse((o) => o.material && !mats.far.includes(o.material) && mats.far.push(o.material));
+  scene.add(farGroup);
+}
+function buildRoom() {
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), stdMat(COL.floor, { roughness: 0.7, metalness: 0.1 }));
+  floor.rotation.x = -Math.PI / 2; floor.position.set(5, -0.002, 0); scene.add(floor);
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(120, 14), stdMat("#0D0F12", { roughness: 0.95 })); back.position.set(5, 7, -18); scene.add(back);
+  const slat = stdMat("#15181C", { roughness: 0.8 });
+  for (let k = 0; k < 40; k++) { const s = new THREE.Mesh(new THREE.BoxGeometry(0.12, 14, 0.2), slat); s.position.set(-50 + k * 2.75, 7, -17.85); scene.add(s); }
+}
+function buildInstances() {
+  const N = BALLS.length, TRAIL = 40;
+  const ballMat = new THREE.MeshStandardMaterial({ color: COL.ball, emissive: COL.ball, emissiveIntensity: 0.55, roughness: 0.6 });
+  inst.ball = new THREE.InstancedMesh(new THREE.SphereGeometry(0.09, 24, 16), ballMat, N);
+  inst.trail = new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 10, 8), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), N * TRAIL);
+  inst.shadow = new THREE.InstancedMesh(new THREE.CircleGeometry(0.13, 24), new THREE.MeshBasicMaterial({ color: "#000000", transparent: true, opacity: 0.55, depthWrite: false }), N);
+  inst.mark = new THREE.InstancedMesh(new THREE.CircleGeometry(0.15, 28), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), N);
+  inst.ring = new THREE.InstancedMesh(new THREE.RingGeometry(0.9, 1.0, 48), new THREE.MeshBasicMaterial({ color: "#ffffff", transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }), N + 1);
+  inst.TRAIL = TRAIL;
+  for (const k of ["trail", "mark", "ring"]) for (let i = 0; i < inst[k].count; i++) inst[k].setColorAt(i, new THREE.Color(0, 0, 0));
+  // InstancedMesh computes its sort sphere lazily from the instances of the first frame it draws, which
+  // would make transparent draw order depend on seek history: pin the sphere and order the layers.
+  const ORDER = { ball: 0, shadow: 2, mark: 3, ring: 4, trail: 5 };
+  for (const k of Object.keys(ORDER)) {
+    inst[k].frustumCulled = false; inst[k].boundingSphere = new THREE.Sphere(new THREE.Vector3(5, 0, 0), 200);
+    inst[k].renderOrder = ORDER[k]; scene.add(inst[k]);
+  }
+}
+
+function build() {
+  RectAreaLightUniformsLib.init();
+  const canvas = document.getElementById("gl"); canvas.width = W; canvas.height = H;
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(1); renderer.setSize(W, H, false);
+  renderer.toneMapping = THREE.NeutralToneMapping; renderer.toneMappingExposure = 1.0;
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(COL.bg);
+  scene.fog = new THREE.FogExp2(COL.bg, 0.011);
+  scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+  scene.environmentIntensity = 0.12;
+  camera = new THREE.PerspectiveCamera(P ? 52 : 38, W / H, 0.1, 200);
+  lights.hemi = new THREE.HemisphereLight("#AFC4D8", "#0A0B0D", 0.25); scene.add(lights.hemi);
+  const netTex = gridTexture(1, 6, 0.9), curtainTex = gridTexture(1, 10, 0.55);
+  buildRoom();
+  LANES.forEach((_, i) => buildLane(i, netTex, curtainTex));
+  [-10, 0, 10, 20.5].forEach((x) => buildCurtain(x, curtainTex));
+  LANES.forEach((cx, i) => buildFixtures(cx, -1, 14.5, i));
+  buildFixtures(WALL_X, -1, 13, 4);
+  buildFixtures(LX, -HALF - 1.5, 12, 5);
+  buildWallBay(netTex);
+  buildFar();
+  for (const m of [...mats.others, ...mats.wall]) m.transparent = true;
+  BALLS = buildBalls();
+  buildInstances();
+  const target = new THREE.WebGLRenderTarget(W, H, { type: THREE.HalfFloatType, samples: 4 });
+  composer = new EffectComposer(renderer, target);
+  composer.addPass(new RenderPass(scene, camera));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(W / 2, H / 2), 0.55, 0.5, 0.82));
+  composer.addPass(new OutputPass());
+}
+
+// ---------------------------------------------------------------- camera: eased keys, one continuous move
+const KEYS = [
+  [0.0, [LX + 4.4, 0.5, 18.5], [LX - 0.4, 0.9, 3.0]],
+  [5.6, [LX + 0.6, 1.9, 12.6], [LX - 0.8, 0.6, 5.5]],
+  [7.6, [0, 21, 44], [5, 0, 3]],
+  [11.0, [16, 18, 40], [6.5, 0, 3.5]],
+  [12.6, [LX - 4.3, 4.6, 15.8], [LX + 0.6, 0, 8.6]],
+  [16.7, [LX - 2.6, 3.5, 13.4], [LX + 0.8, 0, 9.2]],
+  [17.9, [LX + 0.6, 12.5, 13.8], [LX, 0, 8.6]],
+  [21.7, [LX - 1.0, 10.2, 12.2], [LX - 0.2, 0, 8.2]],
+  [23.4, [LX + 23, 13.5, 5.0], [LX, 0, -2.4]],
+  [26.4, [LX + 17, 9, -8], [LX - 0.5, 0, -4.5]],
+  [28.2, [LX + 13, 21, 10], [LX, 0, 0]],
+  [32.0, [LX - 14, 17, 9], [LX, 0, -1]],
+];
+// Portrait framings where the landscape move would leave the subject off a narrow frame: the reveal looks
+// down the row of lanes, and the match court runs top-to-bottom.
+const PORTRAIT = {
+  2: [[-31, 11, 24], [4, 0, 4]],
+  3: [[-21, 15, 34], [10, 0, 4]],
+  8: [[LX + 3.5, 19, 22], [LX, 0, -1.5]],
+  9: [[LX + 0.5, 14.5, 15.5], [LX, 0, -4.0]],
+};
+const _p = new THREE.Vector3(), _l = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
+// Monotone cubic (Fritsch-Carlson) through the keys, per component: the camera keeps moving through each
+// key instead of stopping, and never overshoots a key (so it cannot dip through the floor).
+let SPLINE;
+function buildSpline() {
+  const keys = KEYS.map((k, i) => (P && PORTRAIT[i] ? [k[0], ...PORTRAIT[i]] : k));
+  const ts = keys.map((k) => k[0]), ys = keys.map((k) => [...k[1], ...k[2]]), n = ts.length;
+  const ms = ys.map(() => new Array(6).fill(0));
+  for (let c = 0; c < 6; c++) {
+    const d = []; for (let i = 0; i < n - 1; i++) d.push((ys[i + 1][c] - ys[i][c]) / (ts[i + 1] - ts[i]));
+    ms[0][c] = d[0]; ms[n - 1][c] = d[n - 2];
+    for (let i = 1; i < n - 1; i++) {
+      if (d[i - 1] * d[i] <= 0) { ms[i][c] = 0; continue; }
+      const m = (d[i - 1] + d[i]) / 2, lim = 3 * Math.min(Math.abs(d[i - 1]), Math.abs(d[i]));
+      ms[i][c] = Math.sign(m) * Math.min(Math.abs(m), lim);
+    }
+  }
+  SPLINE = { ts, ys, ms };
+}
+function splineAt(t) {
+  const { ts, ys, ms } = SPLINE, tt = clamp(t, ts[0], ts.at(-1));
+  let k = 0; while (k < ts.length - 2 && tt >= ts[k + 1]) k++;
+  const h = ts[k + 1] - ts[k], s = (tt - ts[k]) / h, s2 = s * s, s3 = s2 * s;
+  const h00 = 2 * s3 - 3 * s2 + 1, h10 = s3 - 2 * s2 + s, h01 = -2 * s3 + 3 * s2, h11 = s3 - s2;
+  return ys[k].map((y0, c) => h00 * y0 + h10 * h * ms[k][c] + h01 * ys[k + 1][c] + h11 * h * ms[k + 1][c]);
+}
+function cameraAt(t) {
+  const v = splineAt(t);
+  _p.set(v[0], v[1], v[2]); _l.set(v[3], v[4], v[5]);
+  camera.up.set(0, 1, 0);
+  camera.position.copy(_p); camera.lookAt(_l);
+  const card = smooth((t - 26.6) / 1.6), wide = smooth((t - 5.8) / 1.4) * (1 - smooth((t - 11.2) / 1.2));
+  if (P) camera.setViewOffset(W, H, 0, -H * 0.11 * (1 - card), W, H);
+  else camera.setViewOffset(W, H, -W * 0.13 * (1 - card) * (1 - wide), -H * 0.06 * wide, W, H);
+  camera.updateMatrixWorld();
+}
+
+// ---------------------------------------------------------------- per-frame world state
+const M4 = new THREE.Matrix4(), Q = new THREE.Quaternion(), FLAT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
+const S3 = new THREE.Vector3(), CC = new THREE.Color();
+function setInst(mesh, i, pos, q, s) { S3.set(s, s, s); M4.compose(pos, q, S3); mesh.setMatrixAt(i, M4); }
+
+function laneLevel(i, t, matchK) {
+  if (i === FOCUS) return smooth(t / 0.9);
+  if (i === 4) return 0.06 + 0.94 * smooth((t - (C("wall.hit") - 1.1)) / 0.6);
+  if (i === 5) return matchK;
+  const on = C(`l${i}.land`) - 0.9;
+  return (0.06 + 0.94 * smooth((t - on) / 0.55)) * (1 - 0.94 * matchK);
+}
+function markColor(b, t) {
+  if (b.session === 1) {
+    const dim = smooth((t - C("session.close") + 0.1) / 0.4);
+    const k = 1 - 0.72 * dim;
+    CC.copy(YELLOW).lerp(new THREE.Color("#C8CCD2"), dim).multiplyScalar(k * (1 - 0.45 * smooth((t - 22) / 1)));
+  } else {
+    CC.copy(YELLOW).multiplyScalar(1 - 0.5 * smooth((t - 22.2) / 1));
+  }
+  return CC;
+}
+function worldAt(t) {
+  const matchK = smooth((t - 21.7) / 1.3), others = 1 - smooth((t - 21.8) / 1.0);
+  // Lane lighting: the focus lane fades up first; each other lane switches on as its machine feeds.
+  // Fixture bars read as clutter once the camera rises past them; the lit court carries the change instead.
+  const barK = 1 - smooth((camera.position.y - 5) / 2.5);
+  fixtures.forEach((f) => {
+    const lv = laneLevel(f.key, t, matchK);
+    f.light.intensity = (f.key === FOCUS ? 2.8 + 1.2 * matchK : 2.8) * lv;
+    f.mat.color.setScalar((0.12 + 1.6 * lv) * barK);
+    f.bars.forEach((b) => { b.visible = barK > 0.01; });
+  });
+  lights.hemi.intensity = 0.18 + 0.12 * matchK;
+  for (const m of mats.others) m.opacity = others;
+  lanes.forEach((ln, i) => { ln.group.visible = i === FOCUS || others > 0.002; });
+  lanes[FOCUS].group.userData.run.scale.x = lerp(1, 16 / 9.6, matchK);
+  for (const m of mats.wall) m.opacity = others;
+  wallBay.visible = others > 0.002;
+  for (const m of mats.far) m.opacity = matchK;
+  farGroup.visible = matchK > 0.002;
+  curtains.forEach((c) => {
+    const k = 1 - matchK; c.visible = k > 0.002; c.userData.rail.visible = c.visible;
+    c.scale.y = Math.max(k, 0.001); c.position.y = c.userData.h * k / 2; c.userData.rail.position.y = c.userData.h * k;
+  });
+  // Nets widen to doubles posts for the match court.
+  nets.forEach((n, i) => { n.scale.x = i === FOCUS ? lerp(1, 12.8 / NET_W, matchK) : 1; });
+  // Machines: LED flashes at each launch; the focus machine sinks away once the match court opens.
+  machines.forEach((m, i) => {
+    let flash = 0;
+    for (const b of BALLS) if (b.lane === i && b.segs[0].p0.z < -1) { const d = t - b.launch; if (d >= 0 && d < 0.5) flash = Math.max(flash, 1 - d / 0.5); }
+    m.userData.led.material.color.copy(YELLOW).multiplyScalar(0.35 + 1.4 * flash);
+    if (i === FOCUS) { const sink = smooth((t - 22.7) / 0.9); m.position.y = -1.2 * sink; m.visible = sink < 0.999; }
+  });
+  // Targets glow on each landing inside them, then settle; they recede in the match court.
+  targetMeshes.forEach((tg, i) => tg.forEach((m, j) => {
+    let glow = 0;
+    for (const b of BALLS) if (b.lane === i && b.target === j && b.mark) { const d = t - b.land; if (d >= 0) glow = Math.max(glow, Math.exp(-d / 0.45)); }
+    const base = 0.55 * (i === FOCUS ? 1 - 0.6 * matchK : 1), fade = i === FOCUS ? 1 : others;
+    m.ring.material.color.setScalar(base).lerp(YELLOW, glow * 0.8).multiplyScalar(1 + glow);
+    m.ring.material.opacity = fade;
+    m.fill.material.color.copy(YELLOW).multiplyScalar((0.03 + 0.35 * glow) * fade);
+  }));
+  // Balls, trails, contact shadows, landing marks and impact rings, all evaluated from t.
+  const camPos = camera.position, TR = inst.TRAIL;
+  let ri = 0;
+  BALLS.forEach((b, i) => {
+    const groupFade = b.lane === FOCUS || b.lane === undefined ? 1 : others;
+    const start = b.segs[0].t0, life = (t < start ? 0 : smooth((t - start) / 0.06)) * (1 - smooth((t - b.end) / 0.3)) * groupFade;
+    ballPos(b, t, _a);
+    const grow = clamp(camPos.distanceTo(_a) / 11, 1, 3.2);
+    setInst(inst.ball, i, _a, Q, life > 0.001 ? life * grow : 0);
+    _b.set(_a.x, 0.003, _a.z);
+    setInst(inst.shadow, i, _b, FLAT, life > 0.001 ? life * grow * clamp(1 - _a.y / 3, 0.25, 1) : 0);
+    for (let k = 1; k <= TR; k++) {
+      const tk = t - k * 0.009, idx = i * TR + k - 1;
+      if (tk < start || life <= 0.001) { setInst(inst.trail, idx, _a, Q, 0); continue; }
+      ballPos(b, tk, _b);
+      const f = Math.pow(1 - k / (TR + 1), 1.6) * life;
+      setInst(inst.trail, idx, _b, Q, grow * (0.4 + 0.6 * f));
+      inst.trail.setColorAt(idx, CC.copy(YELLOW).multiplyScalar(0.55 * f));
+    }
+    if (b.mark && t >= b.land) {
+      const pop = easeOut((t - b.land) / 0.25);
+      _b.set(b.mark.x, 0.007, b.mark.z);
+      setInst(inst.mark, i, _b, FLAT, pop * clamp(grow, 1, 2.2) * groupFade);
+      inst.mark.setColorAt(i, markColor(b, t).multiplyScalar(groupFade));
+    } else setInst(inst.mark, i, _a, FLAT, 0);
+    const ringFor = (p, at, idx) => {
+      const d = t - at;
+      if (d < 0 || d > 0.7 || !p) { setInst(inst.ring, idx, _a, FLAT, 0); return; }
+      _b.set(p.x, 0.008, p.z);
+      setInst(inst.ring, idx, _b, FLAT, (0.2 + 0.85 * easeOut(d / 0.7)) * clamp(grow * 0.6, 1, 2.2));
+      inst.ring.setColorAt(idx, CC.copy(YELLOW).multiplyScalar(0.9 * (1 - d / 0.7) * groupFade));
+    };
+    ringFor(b.mark, b.land, i);
+  });
+  // The match ball's far-court landing gets its own ring and a mark that stays.
+  const m = BALLS.find((b) => b.farT);
+  const d = t - m.farT, idx = BALLS.length;
+  if (d >= 0 && d <= 0.9) {
+    _b.set(m.far.x, 0.008, m.far.z);
+    setInst(inst.ring, idx, _b, FLAT, 0.3 + 1.6 * easeOut(d / 0.9));
+    inst.ring.setColorAt(idx, CC.copy(YELLOW).multiplyScalar(1.1 * (1 - d / 0.9)));
+  } else setInst(inst.ring, idx, _a, FLAT, 0);
+  for (const k of ["ball", "trail", "shadow", "mark", "ring"]) { inst[k].instanceMatrix.needsUpdate = true; if (inst[k].instanceColor) inst[k].instanceColor.needsUpdate = true; }
+  return { matchK };
+}
+
+// ---------------------------------------------------------------- typography
+let TX = {};
+const SCENES = [
+  { id: "lane", kicker: "A TENNIS LAB · SEATTLE", head: "Practice with intent.", caption: "An indoor tennis training studio.", cue: "title.lane", end: 6 },
+  { id: "studio", kicker: "THE STUDIO", head: "Four lanes. One wall.", caption: "Half-court training lanes, plus The Wall.", chips: ["Programmable ball machines", "Human coaching"], cue: "title.studio", end: 12 },
+  { id: "reps", kicker: "THE WORK", head: "Rigorous reps.|Real focus.", caption: "Every ball has a target.", cue: "title.reps", end: 17 },
+  { id: "session", kicker: "SESSION TO SESSION", head: "Pick up where|you left off.", zh: "下次接着练", legend: [["○  LAST SESSION", "#B4B9C0"], ["●  THIS SESSION", "#D9F23E"]], cue: "title.session", end: 22 },
+  { id: "match", kicker: "ON COURT", head: "Take it to the match.", caption: "Progress you can take into your matches.", cue: "title.match", end: 27 },
+];
+const RAIL = ["01  THE LANE", "02  THE STUDIO", "03  THE WORK", "04  SESSIONS", "05  ON COURT"];
+const LABELS = [["LANE 1", 0], ["LANE 2", 1], ["LANE 3", 2], ["LANE 4", 3], ["THE WALL", 4]];
+
+function layout() {
+  // Landscape: a left column over a dark scrim. Portrait: a top column, 3D below, clear of social UI.
+  return P ? { x: 72, y: 190, w: 936, head: 92, hudY: H - 300, card: 600, mark: 132 }
+           : { x: 120, y: 150, w: 1000, head: 100, hudY: H - 112, card: 260, mark: 150 };
+}
+function buildText() {
+  const L = layout();
+  const scrim = (TX.scrim = document.getElementById("scrim"));
+  scrim.style.background = P ? "linear-gradient(180deg, rgba(7,8,10,0.94) 0%, rgba(7,8,10,0.82) 34%, rgba(7,8,10,0) 56%), linear-gradient(0deg, rgba(7,8,10,0.94) 0%, rgba(7,8,10,0.88) 17%, rgba(7,8,10,0) 30%)"
+                             : "linear-gradient(90deg, rgba(7,8,10,0.94) 0%, rgba(7,8,10,0.78) 38%, rgba(7,8,10,0) 62%), linear-gradient(0deg, rgba(7,8,10,0.9) 0%, rgba(7,8,10,0.75) 12%, rgba(7,8,10,0) 24%)";
+  TX.blocks = SCENES.map((s) => {
+    const block = document.createElement("div"); block.className = "block"; dom.appendChild(block);
+    block.style.left = `${L.x}px`; block.style.top = `${L.y}px`; block.style.width = `${L.w}px`;
+    const kicker = el(block, "kicker", s.kicker, `${s.id}.kicker`);
+    const head = el(block, "head", undefined, `${s.id}.head`); head.style.fontSize = `${L.head}px`; head.style.width = `${L.w}px`;
+    const words = s.head.split("|").flatMap((line, k) => {
+      if (k) head.appendChild(document.createTextNode(" "));
+      const row = document.createElement("div"); head.appendChild(row);
+      return maskedWords(row, line);
+    });
+    const caption = s.caption ? el(block, "caption", s.caption, `${s.id}.caption`) : null;
+    if (caption) caption.style.width = `${L.w - 80}px`;
+    const chips = (s.chips || []).map((c, k) => { const e = el(block, "chip", undefined, `${s.id}.chip${k}`); const d = document.createElement("span"); d.className = "dot"; e.appendChild(d); e.appendChild(document.createTextNode(c)); return e; });
+    const zh = s.zh ? el(block, "zh", s.zh, `${s.id}.zh`) : null;
+    const legend = (s.legend || []).map(([text, color], k) => { const e = el(block, "legend", text, `${s.id}.legend${k}`); e.style.color = color; return e; });
+    return { s, block, kicker, head, words, caption, chips, zh, legend };
+  });
+  TX.labels = LABELS.map(([text], k) => el(dom, "abs label", text, `label.${k}`));
+  TX.rail = el(dom, "abs hud", RAIL[0], "hud.rail");
+  TX.url = el(dom, "abs hud", "atennislab.com", "hud.url");
+  TX.track = el(dom, "track"); TX.bar = el(dom, "bar");
+  // Closing card.
+  const card = document.createElement("div"); card.className = "card"; card.style.top = `${L.card}px`; cardLayer.appendChild(card);
+  TX.rule = el(card, "rule");
+  TX.word = el(card, "word-mark", "A Tennis Lab", "close.word"); TX.word.style.fontSize = `${L.mark}px`;
+  TX.sub = el(card, "sub", "Indoor tennis training · Seattle", "close.sub");
+  TX.soon = el(card, "soon", "Opening soon", "close.soon");
+  TX.cta = el(card, "cta");
+  TX.sheen = el(TX.cta, "sheen"); TX.ctaText = el(TX.cta, "cta-text", "Join the waitlist", "close.cta");
+  TX.curl = el(card, "url", "atennislab.com", "close.url");
+  TX.cardScrim = document.getElementById("card-scrim");
+  TX.cardScrim.style.background = "radial-gradient(ellipse at 50% 50%, rgba(7,8,10,0.52) 0%, rgba(7,8,10,0.66) 60%, rgba(7,8,10,0.86) 100%)";
+}
+
+const project = (v) => { const p = v.clone().project(camera); return [(p.x + 1) / 2 * W, (1 - p.y) / 2 * H, p.z]; };
+function rise(e, t, at, dist = 26) {
+  const k = spring(t - at, 0.55, 0.9);
+  e.style.transform = `translateY(${((1 - k) * dist).toFixed(2)}px)`;
+  show(e, smooth((t - at) / 0.35));
+}
+function textAt(t) {
+  const L = layout();
+  // The high reveal puts dark room behind the copy, so the scrim can ease off and let the lanes read.
+  const wide = smooth((t - 5.8) / 1.4) * (1 - smooth((t - 11.2) / 1.2));
+  TX.scrim.style.opacity = (1 - 0.4 * wide).toFixed(3);
+  TX.blocks.forEach(({ s, block, kicker, head, words, caption, chips, zh, legend }) => {
+    const at = C(s.cue), out = 1 - smooth((t - (s.end - 0.5)) / 0.32);
+    const live = t >= at - 0.3 && out > 0.002;
+    // display:none, not visibility: children set visible by an earlier seek would otherwise override a
+    // hidden parent and stay composited, which shifts the scrim's raster by a level on later frames.
+    block.style.display = live ? "flex" : "none";
+    block.style.opacity = out.toFixed(3);
+    if (!live) return;
+    rise(kicker, t, at - 0.2, 14);
+    riseWords(words, t, at, 0.06);
+    show(head, t >= at ? 1 : 0);
+    if (caption) rise(caption, t, at + 0.55);
+    chips.forEach((c, k) => rise(c, t, C("l3.land") + 0.25 + 0.4 * k));
+    if (zh) rise(zh, t, at + 0.8, 18);
+    legend.forEach((e, k) => rise(e, t, at + 1.5 + 0.35 * k, 14));
+  });
+  // Lane and wall labels are pinned to the world during the reveal.
+  const anchors = [...LANES.map((x) => new THREE.Vector3(x, 0, HALF + 0.9)), new THREE.Vector3(WALL_X, 4.6, -1.3)];
+  TX.labels.forEach((e, k) => {
+    const on = k < 4 ? C(`l${k}.land`) - 0.55 : C("wall.hit") - 0.6;
+    const vis = smooth((t - on) / 0.3) * (1 - smooth((t - 11.15) / 0.3));
+    const [x, y] = project(anchors[k]);
+    const lw = 170, m = (P ? 72 : 96) + lw / 2;
+    const inside = Math.min(smooth((x + 20) / 60), smooth((W + 20 - x) / 60));
+    place(e, clamp(x, m, W - m), clamp(y + (k < 4 ? 16 : -70), 80, L.hudY - 90), "c", vis * inside);
+  });
+  // HUD: chapter rail + progress bar + url; leave before the closing card.
+  const idx = Math.min(4, [6, 12, 17, 22, 99].findIndex((e) => t < e));
+  const sceneStart = [0, 6, 12, 17, 22][idx], sceneEnd = [6, 12, 17, 22, 27][idx];
+  const blink = Math.min(smooth((t - sceneStart - 0.05) / 0.25), 1 - smooth((t - sceneEnd + 0.3) / 0.25));
+  TX.rail.textContent = RAIL[idx];
+  const hudOut = 1 - smooth((t - 26.6) / 0.35), hudIn = smooth((t - 0.2) / 0.5);
+  const tw = P ? W - 144 : 420, ty = L.hudY + 44;
+  place(TX.rail, L.x, L.hudY, "l", (idx === 0 ? hudIn : 1) * blink * hudOut);
+  place(TX.url, W - (P ? 72 : 120), L.hudY, "r", hudIn * hudOut);
+  TX.track.style.width = `${tw}px`; TX.track.style.transform = `translate(${L.x}px, ${ty}px)`; TX.track.style.opacity = (0.9 * hudIn * hudOut).toFixed(3);
+  TX.bar.style.width = `${tw}px`; TX.bar.style.transform = `translate(${L.x}px, ${ty}px) scaleX(${clamp(t / 27).toFixed(4)})`; TX.bar.style.opacity = (hudIn * hudOut).toFixed(3);
+  // Closing card.
+  const cardIn = smooth((t - 26.9) / 0.6);
+  show(TX.cardScrim, cardIn);
+  TX.rule.style.transform = `scaleX(${easeOut((t - 27.5) / 0.6).toFixed(3)})`; show(TX.rule, smooth((t - 27.5) / 0.2));
+  rise(TX.word, t, C("wordmark.in"), 34);
+  rise(TX.sub, t, C("wordmark.in") + 0.45);
+  rise(TX.soon, t, C("wordmark.in") + 0.75, 16);
+  rise(TX.cta, t, C("cta.on"), 22);
+  rise(TX.curl, t, C("cta.on") + 0.35, 18);
+  const sweep = ((t - C("cta.on") - 0.6) / 1.6) % 1;
+  TX.sheen.style.transform = `translateX(${(t < C("cta.on") + 0.6 ? -200 : lerp(-200, 560, sweep)).toFixed(1)}px)`;
+}
+
+function seek(t) {
+  cameraAt(t);
+  worldAt(t);
+  composer.render();
+  textAt(t);
+}
+
+vch.seek = seek;
+vch.ready = loadContract("/examples/atl-promo.json").then(async (loaded) => {
+  C = loaded.cue; T = { duration: loaded.contract.video.duration };
+  W = loaded.contract.video.width; H = loaded.contract.video.height; P = H > W;
+  const stage = document.getElementById("stage"); stage.style.width = `${W}px`; stage.style.height = `${H}px`;
+  await Promise.all([document.fonts.load('800 100px "Inter"'), document.fonts.load('500 24px "JBMono"'), document.fonts.load('60px "NotoSC"', "下次接着练")]);
+  build(); buildSpline(); buildText();
+  if (!loaded.harness) preview(stage, W, H, T.duration, seek);
+});
+</script>
+</body>
+</html>
